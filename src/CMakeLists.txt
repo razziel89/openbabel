@@ -103,6 +103,7 @@ set(stereo_srcs
 )
 
 set(openbabel_srcs
+  aggregate.cpp
   alias.cpp
   atom.cpp
   base.cpp
