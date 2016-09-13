@@ -2,6 +2,7 @@
 forcefield.h - Handle OBForceField class.
 
 Copyright (C) 2006-2007 by Tim Vandermeersch <tim.vandermeersch@gmail.com>
+One portion Copyright (C) 2016 by Torsten Sachse
 
 This file is part of the Open Babel project.
 For more information, see <http://openbabel.org/>
@@ -1177,6 +1178,12 @@ namespace OpenBabel
 #ifdef HAVE_EIGEN
     //! \since version 2.4
     int DiverseConfGen(double rmsd, unsigned int nconfs = 0, double energy_gap = 50, bool verbose = false);
+    //! \brief Screen a set of conformers in a molecule by their rmsd to get a highly diverse set.
+    //!
+    //! Conformers that are retained have to have an energy at max egap above emin. If egap<0, this
+    //! behaviour is switched off. If emin_given==false, emin will be ignored and determined using
+    //! the forcefield.
+    int ScreenByRMSD(double rmsd, double egap, double emin, bool emin_given, bool verbose = false);
 #endif
 
     /////////////////////////////////////////////////////////////////////////

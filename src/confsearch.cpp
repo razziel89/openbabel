@@ -2,6 +2,7 @@
 confsearch.cpp - Conformer Searching Routines (see also forcefield.cpp)
 
 Copyright (C) 2010 Noel O'Boyle <baoilleach@gmail.com>
+Some portions Copyright (C) 2016 by Torsten Sachse
 
 This file is part of the Open Babel project.
 For more information, see <http://openbabel.sourceforge.net/>
@@ -281,7 +282,7 @@ vector<vector3> GetHeavyAtomCoords(const OBMol* mol, const vector<vector3> &all_
   return v_hvyatoms;
 }
 
-void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose) {
+void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose, bool precise=true) {
 
   OBDiversePoses::Tree* poses = divposes->GetTree();
   double cutoff = divposes->GetCutoff();
@@ -303,7 +304,7 @@ void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePos
 
   // Loop through the confs and filter using a tree
   newconfs.clear();
-  OBDiversePoses newtree(*mol, cutoff, true);
+  OBDiversePoses newtree(*mol, cutoff, precise);
   for (vpp::iterator conf = confs.begin(); conf!=confs.end(); ++conf) {
     if (newtree.AddPose(conf->first, conf->second)) {
       newconfs.push_back(*conf);
@@ -447,7 +448,102 @@ int OBForceField::DiverseConfGen(double rmsd, unsigned int nconfs, double energy
     return 0;
  }
 
+int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_given, bool verbose)
+  {
+    _energies.clear(); // Wipe any energies from previous algorithms
+    
+    if (_mol.NumConformers()<=0){
+        SetupPointers();
+        _energies.push_back(Energy(false));
+        return 0;
+    }
+
+    _energies.reserve(_mol.NumConformers());
+    _mol.SetConformer(0);
+    
+    bool escreening = egap > 0.0 ? true : false;
+    double lowest_energy;
+    if (emin_given){
+        lowest_energy = emin;
+    }
+    else{
+        SetupPointers();
+        lowest_energy = Energy(false); // Energy(false) means "do not evaluate gradients"
+        //Determine energies of all conformers if screening by energies is desired.
+        //Add all zeros otherwise.
+        if (escreening){
+            double temp_energy;
+            for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
+                _mol.SetConformer(conf_count);
+                SetupPointers();
+                temp_energy = Energy(false);
+                if (temp_energy < lowest_energy){
+                    lowest_energy = temp_energy;
+                }
+                _energies.push_back(temp_energy);
+            }
+        }
+    }
+    if (emin_given || !escreening){
+        for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
+            _energies.push_back(0.0);
+        }
+    }
+
+    int origLogLevel = _loglvl;
+
+    OBDiversePoses divposes(_mol, rmsd, false);
+
+    // Main loops over conformers
+    if (escreening){
+        if (verbose){
+            puts("Using energy screening.");
+        }
+        for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
+            _mol.SetConformer(conf_count);
+            SetupPointers();
+            double currentE;
+            if (emin_given){
+                currentE = Energy(false);
+                _energies[conf_count] = currentE;
+            }
+            else{
+                currentE = _energies[conf_count];
+            }
+            if (currentE < lowest_energy + egap) { // Don't retain high energy poses
+                divposes.AddPose(_mol.GetCoordinates(), currentE);
+            }
+        }
+    }
+    else{
+        if (verbose){
+            puts("Not using energy screening.");
+        }
+        for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
+            _mol.SetConformer(conf_count);
+            SetupPointers();
+            // Retain all poses
+            divposes.AddPose(_mol.GetCoordinates(), 0.0);
+        }
+    }
+
+    //save the number of conformers currently present in the molecule
+    int nr_confs = _mol.NumConformers();
+
+    _mol.SetConformer(0);
+    // Get results from the tree
+    UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false);
+
+    //Delete all old conformers from molecule and their associated energies
+    _mol.DeleteConformers(0,nr_confs-1);
+    _energies.erase(_energies.begin(),_energies.begin()+nr_confs);
+
+    _mol.SetConformer(0);
+
+    return 0;
+ }
+
 } // end of namespace OpenBabel
 
 //! \file confsearch.cpp
-//! \brief Conformer searching routines
+//! \brief Conformer searching and screening routines

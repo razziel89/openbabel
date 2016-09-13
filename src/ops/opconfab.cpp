@@ -5,6 +5,12 @@ opconfab.cpp - Confab, the conformer generator described in
 
 Copyright (C) 2013 by Noel O'Boyle
 
+This file also contains an OBOp called SimScreen to screen molecules depending
+on how similar they are, RMSD-wise. The code has been added below that
+concerning Confab.
+
+Copyright for SimScreen (C) 2015 by Torsten Sachse (torsten.sachse@uni-jena.de)
+
 This file is part of the Open Babel project.
 For more information, see <http://openbabel.org/>
 
@@ -180,3 +186,161 @@ namespace OpenBabel
 
 }//namespace
 
+
+//
+namespace OpenBabel
+{
+  using namespace std;
+
+  //////////////////////////////////////////////////////////
+  //
+  //  SimScreen
+  //
+  //////////////////////////////////////////////////////////
+
+  class SimScreen
+  {
+  public:
+    SimScreen() {};
+  };
+
+  class OpSimScreen : public OBOp
+  {
+    public:
+      OpSimScreen(const char* ID) : OBOp(ID, false) {
+      }
+
+      const char* Description()
+      {
+        return "SimScreen, screen given molecules with respect to their RMSD and energy.\n"
+          "Typical usage: obabel infile.xxx -O outfile.yyy --simscreen --rcutoff 5 --ecutoff 50\n"
+          "  options:\n"
+          "    --rcutoff #  RMSD cutoff (default 0.5 Angstrom)\n"
+          "    --ecutoff #  Energy cutoff (default -100 kcal/mol)\n"
+          "                 Negative values switch off energy screening\n"
+          "    --emin #     Manually declare the global minimum energy \n"
+          "    --ffname #   Name of the force field to use (default mmff94)\n"
+          ;
+      }
+
+      virtual bool WorksWith(OBBase* pOb) const
+      {
+        return dynamic_cast<OBMol*>(pOb) != NULL;
+      }
+      virtual bool Do(OBBase* pOb, const char* OptionText, OpMap* pmap, OBConversion*);
+      
+      void DisplayConfig(OBConversion* pConv);
+      void Run(OBConversion* pConv, OBMol* pmol);
+      double rmsd_cutoff;
+      double energy_cutoff;
+      double lowest_energy;
+      bool lowest_energy_given;
+      bool verbose;
+      string ffname;
+      OBForceField *pff;
+  };
+
+  //////////////////////////////////////////////////////////
+  OpSimScreen theSimScreen("simscreen"); //Global instance
+  //////////////////////////////////////////////////////////
+
+  void OpSimScreen::DisplayConfig(OBConversion* pConv)
+  {
+    cout << "..Input format  = " << pConv->GetInFormat()->GetID() << endl;
+    cout << "..Output format = " << pConv->GetOutFormat()->GetID() << endl;
+    cout << "..RMSD cutoff   = " << rmsd_cutoff << endl;
+    if (energy_cutoff >= 0.0){
+        cout << "..Energy cutoff = " << energy_cutoff << endl;
+        if (lowest_energy_given){
+            cout << "..Lowest energy = " << lowest_energy << endl;
+        }
+        else{
+            cout << "..Lowest energy will be determined" << endl;
+        }
+    }
+    else{
+        cout << "..Energy will be ignored for screening" << endl;
+    }
+    cout << "..forcefield    = " << ffname << endl;
+    cout << "..Verbose? " << (verbose ? "True" : "False") << endl;
+  }
+
+  bool OpSimScreen::Do(OBBase* pOb, const char* OptionText, OpMap* pmap, OBConversion* pConv=NULL)
+  {
+    OBMol* pmol = dynamic_cast<OBMol*>(pOb);
+
+    if(pConv && pConv->IsFirstInput())
+    {
+      pConv->AddOption("writeconformers", OBConversion::GENOPTIONS);
+      rmsd_cutoff = 0.5;
+      energy_cutoff = -100.0;
+      ffname = "mmff94";
+      lowest_energy_given = false;
+      lowest_energy = 0.0;
+      verbose = false;
+
+      OpMap::const_iterator iter;
+      iter = pmap->find("rcutoff");
+      if(iter!=pmap->end())
+        rmsd_cutoff = atof(iter->second.c_str());
+      iter = pmap->find("ecutoff");
+      if(iter!=pmap->end())
+        energy_cutoff = atof(iter->second.c_str());
+      iter = pmap->find("ffname");
+      if(iter!=pmap->end())
+        ffname = iter->second;
+      iter = pmap->find("emin");
+      if(iter!=pmap->end()){
+        lowest_energy_given = true;
+        lowest_energy = atof(iter->second.c_str());
+      }
+      iter = pmap->find("verbose");
+      if(iter!=pmap->end())
+        verbose = true;
+
+      cout << "**Starting SimScreen" << endl;
+      pff = OpenBabel::OBForceField::FindType(ffname.c_str());
+      if (!pff) {
+        cout << "!Cannot find forcefield " << ffname << "!" << endl;
+        exit(-1);
+      }
+      DisplayConfig(pConv);
+    }
+
+    Run(pConv, pmol);
+
+    return false;
+  }
+
+  void OpSimScreen::Run(OBConversion* pConv, OBMol* pmol)
+  {
+    //OBMol mol = *pmol;
+    
+    //mol.AddHydrogens(); //this should not be necessary for the screening
+    bool success = pff->Setup(*pmol);
+    if (!success) {
+      cout << "!!Cannot set up forcefield for this molecule\n"
+           << "!!Skipping\n" << endl;
+      return;
+    }
+    cout << endl << "..conformers before screening: " << pmol->NumConformers() << endl;
+
+    pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, lowest_energy, lowest_energy_given, verbose);
+
+    pff->GetConformers(*pmol);
+
+    cout << "..conformers after screening: " << pmol->NumConformers() << endl;
+
+    for (unsigned int c = 0; c < pmol->NumConformers(); ++c) {
+      pmol->SetConformer(c);
+      if(!pConv->GetOutFormat()->WriteMolecule(pmol, pConv))
+        break;
+    }
+    if (pmol->NumConformers()>0) {
+        pmol->SetConformer(0);
+    }
+    cout << endl;
+
+  }
+
+} //namespace

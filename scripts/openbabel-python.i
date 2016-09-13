@@ -82,6 +82,10 @@
 
 namespace std {
 
+//used to access std::map<std::string,std::string> via the
+// language bindings to be able to call OBOps externally
+%template(StdMapStringString) map<string,string>;
+
 %define VVTEMPLATE_WRAP(name, T)
 %feature("ignore") vector< vector<T> >::append;
 %feature("ignore") vector< vector<T> >::assign;
