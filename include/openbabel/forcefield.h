@@ -1182,8 +1182,8 @@ namespace OpenBabel
     //!
     //! Conformers that are retained have to have an energy at max egap above emin. If egap<0, this
     //! behaviour is switched off. If emin_given==false, emin will be ignored and determined using
-    //! the forcefield.
-    int ScreenByRMSD(double rmsd, double egap, double emin, bool emin_given, bool verbose = false);
+    //! the forcefield. If prec>=0, screening by symmetry will also be performed.
+    int ScreenByRMSD(double rmsd, double egap, double emin, bool emin_given, short prec, bool verbose = false);
 #endif
 
     /////////////////////////////////////////////////////////////////////////
