@@ -29,8 +29,12 @@ GNU General Public License for more details.
 #include <openbabel/math/vector3.h>
 
 #include <float.h> // For DBL_MAX
-#include <algorithm> // For min
+#include <algorithm> // For min and std::sort
 #include <limits.h> // For UINTS_MAX with certain old GCC4
+#include <map> //for std::map
+#include <utility> //for std::pair
+#include <functional> //for std::hash
+#include <deque> //for std::deque
 
 #include <iomanip> // For setprecision
 
@@ -91,11 +95,15 @@ namespace OpenBabel
       ~OBDiversePoses() {
         delete palign; // Allocated with 'new'
       }
-      bool AddPose(double* coords, double energy);
-      bool AddPose(vector<vector3> coords, double energy);
-      typedef std::pair<vector<vector3>, double> PosePair;
+      bool AddPose(double* coords, double energy/*, int conf_nr*/);
+      bool AddPose(vector<vector3> coords, double energy/*, int conf_nr*/);
+      //typedef triple<vector<vector3>, double, int> PoseTriple;
+      typedef pair<vector<vector3>, double> PosePair;
+      //typedef tree<PoseTriple> Tree;
       typedef tree<PosePair> Tree;
       Tree* GetTree() { return &poses; }
+      //typedef tree<PoseTriple>::iterator Tree_it;
+      //typedef tree<PoseTriple>::sibling_iterator Tree_sit;
       typedef tree<PosePair>::iterator Tree_it;
       typedef tree<PosePair>::sibling_iterator Tree_sit;
       size_t GetSize();
@@ -133,6 +141,7 @@ namespace OpenBabel
 
     levels = vec;
     vector<vector3> pdummy;
+    //poses.insert(poses.begin(), PoseTriple(pdummy, 0.0, 0)); // Add a dummy top node
     poses.insert(poses.begin(), PosePair(pdummy, 0.0)); // Add a dummy top node
 
     // Remember the hydrogens
@@ -142,14 +151,15 @@ namespace OpenBabel
         hydrogens.SetBitOn(i - 1);
   }
 
-  bool OBDiversePoses::AddPose(double* coords, double energy) {
-    vector<vector3> vcoords, vcoords_hvy;
+  bool OBDiversePoses::AddPose(double* coords, double energy/*, int conf_nr=0*/) {
+    vector<vector3> vcoords;
+    vcoords.reserve(natoms);
     for (unsigned int a = 0; a < natoms; ++a)
       vcoords.push_back(vector3(coords[a*3], coords[a*3+1], coords[a*3+2]));
-    return AddPose(vcoords, energy);
+    return AddPose(vcoords, energy/*, conf_nr*/);
   }
 
-  bool OBDiversePoses::AddPose(vector<vector3> vcoords, double energy) {
+  bool OBDiversePoses::AddPose(vector<vector3> vcoords, double energy/*, int conf_nr=0*/) {
     Tree_it node = poses.begin();
     int level = 0;
     bool first_time = true;
@@ -168,6 +178,7 @@ namespace OpenBabel
     stack_levels.push_back(level);
 
     vector<Tree_it> insert_pt;
+    //vector<PoseTriple> insert_data;
     vector<PosePair> insert_data;
     vector<int> insert_level;
 
@@ -218,6 +229,7 @@ namespace OpenBabel
         // could still be rejected for addition to the tree.
         insert_pt.push_back(node);
         insert_level.push_back(level);
+        //insert_data.push_back(PoseTriple(vcoords, energy, conf_nr));
         insert_data.push_back(PosePair(vcoords, energy));
         continue;
       }
@@ -243,6 +255,7 @@ namespace OpenBabel
 
 
     // If we get here, then the molecule has been accepted for addition to the tree
+    //vector<PoseTriple>::iterator b = insert_data.begin();
     vector<PosePair>::iterator b = insert_data.begin();
     vector<int>::iterator c = insert_level.begin();
     for (vector<Tree_it>::iterator a = insert_pt.begin(); a != insert_pt.end(); ++a, ++b, ++c) {
@@ -270,6 +283,9 @@ namespace OpenBabel
   //bool sortpred(const OBDiversePoses::PosePair *a, const OBDiversePoses::PosePair *b) {
   //  return (a->second < b->second);
   //}
+  //bool sortpred_b(const OBDiversePoses::PoseTriple& a, const OBDiversePoses::PoseTriple& b) {
+  //  return (a.second < b.second);
+  //}
   bool sortpred_b(const OBDiversePoses::PosePair& a, const OBDiversePoses::PosePair& b) {
     return (a.second < b.second);
   }
@@ -282,11 +298,14 @@ vector<vector3> GetHeavyAtomCoords(const OBMol* mol, const vector<vector3> &all_
   return v_hvyatoms;
 }
 
-void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose, bool precise=true) {
+//void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose,
+//        bool precise=true, std::vector<int>* new_confs=NULL) {
+void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose, bool precise=true, bool sort=true) {
 
   OBDiversePoses::Tree* poses = divposes->GetTree();
   double cutoff = divposes->GetCutoff();
 
+  //vector <OBDiversePoses::PoseTriple> confs, newconfs;
   vector <OBDiversePoses::PosePair> confs, newconfs;
 
   // The leaf iterator will (in effect) iterate over the nodes just at the loweset level
@@ -295,11 +314,13 @@ void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePos
       confs.push_back(*node);
 
   // Sort the confs by energy (lowest first)
-  sort(confs.begin(), confs.end(), sortpred_b);
+  if (sort)
+    std::sort(confs.begin(), confs.end(), sortpred_b);
 
   if(verbose)
     cout << "....tree size = " << divposes->GetSize() <<  " confs = " << confs.size() << "\n";
 
+  //typedef vector<OBDiversePoses::PoseTriple> vpp;
   typedef vector<OBDiversePoses::PosePair> vpp;
 
   // Loop through the confs and filter using a tree
@@ -313,7 +334,11 @@ void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePos
   if (verbose)
     cout << "....new tree size = " << newtree.GetSize() <<  " confs = " << newconfs.size() << "\n";
 
+  //if (new_confs!=NULL){
+  //    new_confs->reserve(newconfs.size());
+  //}
   // Add confs to the molecule's conformer data and add the energies to molecules's energies
+  energies.reserve(energies.size()+newconfs.size());
   for (vpp::iterator chosen = newconfs.begin(); chosen!=newconfs.end(); ++chosen) {
     energies.push_back(chosen->second);
 
@@ -327,6 +352,8 @@ void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePos
       confCoord[a*3 + 2] = pv3->z();
     }
     mol->AddConformer(confCoord);
+    //if (new_confs!=NULL)
+    //    new_confs->push_back(chosen->third);
   }
 }
 
@@ -448,97 +475,246 @@ int OBForceField::DiverseConfGen(double rmsd, unsigned int nconfs, double energy
     return 0;
  }
 
-int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_given, bool verbose)
+typedef std::pair<std::string,int> pair_str_idx;
+
+bool sort_4d(pair_str_idx p1, pair_str_idx p2){
+    return (p1.first.compare(p2.first))<0;
+}
+
+int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbose)
   {
-    _energies.clear(); // Wipe any energies from previous algorithms
     
     if (_mol.NumConformers()<=0){
-        SetupPointers();
-        _energies.push_back(Energy(false));
+        std::cerr << "ERROR: no conformers in given molecule, cannot perform similarity screening." << std::endl;
+        return 1;
+    }
+
+    _energies.clear(); // Wipe any energies from previous algorithms
+    _energies.reserve(_mol.NumConformers());
+    
+    bool escreening = egap > 0.0 ? true : false;
+    bool rmsdscreening = rmsd > 0.0 ? true : false;
+    if (!rmsdscreening){rmsd = 0.0;}
+    bool symscreening = prec >= 0 ? true : false;
+
+    if (!escreening && !rmsdscreening && !symscreening){
+        if (verbose){
+            cout << "None of the 3 screening procedures activated." << endl;
+        }
         return 0;
     }
 
-    _energies.reserve(_mol.NumConformers());
-    _mol.SetConformer(0);
-    
-    bool escreening = egap > 0.0 ? true : false;
     double lowest_energy;
-    if (emin_given){
-        lowest_energy = emin;
-    }
-    else{
+    if (escreening){
+        _mol.SetConformer(0);
         SetupPointers();
         lowest_energy = Energy(false); // Energy(false) means "do not evaluate gradients"
         //Determine energies of all conformers if screening by energies is desired.
         //Add all zeros otherwise.
-        if (escreening){
-            double temp_energy;
-            for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
-                _mol.SetConformer(conf_count);
-                SetupPointers();
-                temp_energy = Energy(false);
-                if (temp_energy < lowest_energy){
-                    lowest_energy = temp_energy;
-                }
-                _energies.push_back(temp_energy);
-            }
-        }
-    }
-    if (emin_given || !escreening){
-        for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
-            _energies.push_back(0.0);
-        }
-    }
-
-    int origLogLevel = _loglvl;
-
-    OBDiversePoses divposes(_mol, rmsd, false);
-
-    // Main loops over conformers
-    if (escreening){
-        if (verbose){
-            puts("Using energy screening.");
-        }
-        for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
+        double temp_energy;
+        for (int conf_count = 1; conf_count < _mol.NumConformers(); ++conf_count){
             _mol.SetConformer(conf_count);
             SetupPointers();
-            double currentE;
-            if (emin_given){
-                currentE = Energy(false);
-                _energies[conf_count] = currentE;
+            temp_energy = Energy(false);
+            if (temp_energy < lowest_energy){
+                lowest_energy = temp_energy;
             }
-            else{
-                currentE = _energies[conf_count];
-            }
-            if (currentE < lowest_energy + egap) { // Don't retain high energy poses
-                divposes.AddPose(_mol.GetCoordinates(), currentE);
-            }
+            _energies.push_back(temp_energy);
         }
     }
     else{
-        if (verbose){
+        //_energies has been resized to hold at least _mol.NumConformers() numbers
+        std::fill(_energies.begin(), _energies.begin()+_mol.NumConformers(), 0.0);
+    }
+
+    OBDiversePoses divposes(_mol, rmsd, false);
+
+    if (verbose){
+        if (escreening){
+            puts("Using energy screening.");
+        }else{
             puts("Not using energy screening.");
         }
-        for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
-            _mol.SetConformer(conf_count);
-            SetupPointers();
-            // Retain all poses
-            divposes.AddPose(_mol.GetCoordinates(), 0.0);
+        if (rmsdscreening){
+            puts("Using rmsd screening.");
+        }else{
+            puts("Not using rmsd screening.");
+        }
+        if (symscreening){
+            puts("Using symmetry screening.");
+        }else{
+            puts("Not using symmetry screening.");
         }
     }
+    double sym_rmsd = rmsd;
+    if (!rmsdscreening && symscreening){
+        std::cerr << "WARNING: no RMSD set but one is required for symmetry screening. Will use 0.01 for symmetry screening."
+            << std::endl;
+        sym_rmsd = 0.01;
+    }
+    
+    // the information about every conformer that has the associated hash
+    // the information is: conformer number and sorted atom order
+    typedef std::pair<
+                int,std::vector<int>
+            > hash_info;
+    // this is the type of the map that will save the sorted atom order
+    // (allowing for easy checks of identity of conformers)
+    typedef std::map<
+                // information about every conformer that has the same hash has to be saved
+                // hence the std::deque
+                std::size_t,std::deque<hash_info>
+            > maptype;
+
+    maptype order_map;
+    maptype::iterator it;
+
+    // Main loops over conformers
+    for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
+
+        bool screened = false;
+        _mol.SetConformer(conf_count);
+        SetupPointers();
+
+        // sort the atoms in the conformer to screen for symmetry
+        if (symscreening){
+            int nr_hvy_atoms = _mol.NumHvyAtoms();
+            std::hash<std::string> hash_fn;
+            std::size_t geom_hash;
+            std::vector<int> atom_order;
+            atom_order.reserve(nr_hvy_atoms);
+            { // this is the minimal scope for symsort
+                // create a string representation of the conformer
+                std::vector<pair_str_idx> symsort;
+                symsort.reserve(nr_hvy_atoms);
+                for (OBAtomIterator it=_mol.BeginAtoms(); it!=_mol.EndAtoms(); ++it){
+                    // Ignore hydrogens atoms
+                    if (not((*it)->IsHydrogen())){
+                        std::stringstream ss;
+                        ss << std::fixed << std::setprecision(prec);
+                        ss << (*it)->GetAtomicNum() << " "
+                           << (*it)->GetX() << " "
+                           << (*it)->GetY() << " "
+                           << (*it)->GetZ();
+                        symsort.push_back(std::make_pair(ss.str(), (*it)->GetIdx()));
+                    }
+                }
+                // in order to check whether 2 conformers are symmetry equivalent,
+                // a definitive order of atoms has to be enforced to avoid pairwise
+                // checks of identity of atoms
+                std::sort(symsort.begin(), symsort.end(), sort_4d);
+
+                // two conformers are likely identical if the hashes of their
+                // string representations are equivalent
+                std::stringstream ss;
+                for (std::vector<pair_str_idx>::iterator it = symsort.begin(); it!=symsort.end(); ++it){
+                    ss << it->first << std::endl;
+                    atom_order.push_back(it->second);
+                }
+                geom_hash = hash_fn(ss.str());
+            }
+
+            hash_info order_element;
+            order_element = std::make_pair(conf_count,atom_order);
+
+            it = order_map.find(geom_hash);
+            if (it != order_map.end()){
+                // If they share a hash, they still have to be checked for strict identity
+                // with respect to the given RMSD (since the hashes can be equivalent just by accident).
+                // This check has to be performed for every conformer with the determined hash.
+                for (std::deque<hash_info>::iterator data_it = it->second.begin(); !screened && data_it!=it->second.end(); ++data_it){
+                    // conf_it1 will iterate over the sorted atom indices in the conformer that might be added to the order_map
+                    // conf_it2 will iterate over the sorted atom indices in the conformers already in the order_map
+                    // it2_end is just a helper variable to check for the end of the iteration
+                    // No more checks for the end of the iteration have to be performed since
+                    // all conformers must have the same number of non-hydrogen atoms.
+                    // This process DOES ignore hydrogen atoms (see above).
+                    std::vector<int>::iterator conf_it1, conf_it2, it2_end;
+                    conf_it1 = order_element.second.begin();
+                    conf_it2 = data_it->second.begin();
+                    it2_end  = data_it->second.end();
+                    // This allows for comparing the geometries of conformers without
+                    // explicitly setting all atom coordinates using SetConformer.
+                    double* geom1 = _mol.GetConformer(order_element.first);
+                    double* geom2 = _mol.GetConformer(data_it->first);
+                    // These OBAtom*s will only be used to check the equivalence of element types
+                    OBAtom* at1;
+                    OBAtom* at2;
+                    // the squared rmsd
+                    double rmsd_2;
+                    for (; conf_it2!=it2_end; ++conf_it1, ++conf_it2){
+                        // check many conditions under which the conformers are not identical
+                        at1 = _mol.GetAtom(*conf_it1);
+                        at2 = _mol.GetAtom(*conf_it2);
+                        // if not the same elements
+                        if (at1->GetAtomicNum() != at2->GetAtomicNum()){
+                            break;
+                        }
+                        double dist;
+                        // these now point to the x-coordinates of the two atoms
+                        // OpenBabel's ids start counting at 1
+                        double* coord1 = geom1+(3 * *conf_it1)-3;
+                        double* coord2 = geom2+(3 * *conf_it2)-3;
+                        // add contribution to RMSD
+                        dist = *(coord1+0) - *(coord2+0);
+                        rmsd_2 += dist*dist;
+                        dist = *(coord1+1) - *(coord2+1);
+                        rmsd_2 += dist*dist;
+                        dist = *(coord1+2) - *(coord2+2);
+                        rmsd_2 += dist*dist;
+                    }
+                    rmsd_2 /= _mol.NumAtoms();
+                    if (rmsd_2 <= sym_rmsd*sym_rmsd){
+                        screened = true;
+                    }
+                }
+                if (!screened){
+                    order_map[geom_hash].push_back(order_element);
+                }
+            }
+            else{
+                order_map[geom_hash].push_back(order_element);
+            }
+        }
+
+        //SetupPointers();
+        double currentE = 0.0;
+        if (!screened && escreening){
+            currentE = _energies[conf_count];
+            screened = (currentE >= lowest_energy + egap);
+        }
+        // don't retain poses if:
+        //  - pose is symmetry equivalent to one that has already been processed
+        //  - energy too high
+        if (!screened) {
+            // screening with respect to RMSD will be performed here (if rmsd>0.0)
+            divposes.AddPose(_mol.GetCoordinates(), currentE/*, conf_count*/);
+        }
+
+    }
+    order_map.clear();
 
     //save the number of conformers currently present in the molecule
     int nr_confs = _mol.NumConformers();
 
+    //std::vector<int> new_confs;
     _mol.SetConformer(0);
+    SetupPointers();
     // Get results from the tree
-    UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false);
+    //UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, &new_confs);
+    UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, escreening);
+
+    //for (std::vector<int>::iterator it = new_confs.begin(); it!=new_confs.end(); ++it){
+    //    cout << *it << endl;
+    //}
 
     //Delete all old conformers from molecule and their associated energies
     _mol.DeleteConformers(0,nr_confs-1);
-    _energies.erase(_energies.begin(),_energies.begin()+nr_confs);
+    _energies.clear();
+    //_energies.erase(_energies.begin(),_energies.begin()+nr_confs);
 
     _mol.SetConformer(0);
+    SetupPointers();
 
     return 0;
  }

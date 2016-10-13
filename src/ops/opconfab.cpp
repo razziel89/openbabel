@@ -207,6 +207,15 @@ namespace OpenBabel
   class OpSimScreen : public OBOp
   {
     public:
+
+      enum ALIGNING {
+          never = 0,
+          before = 1,
+          after = 2,
+          always = 3,
+          nr_elements = 4
+      };
+
       OpSimScreen(const char* ID) : OBOp(ID, false) {
       }
 
@@ -215,11 +224,22 @@ namespace OpenBabel
         return "SimScreen, screen given molecules with respect to their RMSD and energy.\n"
           "Typical usage: obabel infile.xxx -O outfile.yyy --simscreen --rcutoff 5 --ecutoff 50\n"
           "  options:\n"
-          "    --rcutoff #  RMSD cutoff (default 0.5 Angstrom)\n"
-          "    --ecutoff #  Energy cutoff (default -100 kcal/mol)\n"
-          "                 Negative values switch off energy screening\n"
-          "    --emin #     Manually declare the global minimum energy \n"
+          "    --rcutoff #  RMSD cutoff (default: do not use)\n"
+          "    --ecutoff #  Energy cutoff (default: do not use)\n"
           "    --ffname #   Name of the force field to use (default mmff94)\n"
+          "    --prec #     Number of decimal places used for determination\n"
+          "                 of equivalence due to symmetry. A high value reduces\n"
+          "                 computational time but increases risk of getting\n"
+          "                 duplicates (default: do not use symmetry screening,\n"
+          "                 highly recommended: 2 or 1)\n"
+          "    --ssalign #  Automatically align all conformers prior to or after the\n"
+          "                 similarity screening procedure. The third and second main axes\n"
+          "                 would be aligned to the x and y axes, respectively and the\n"
+          "                 molecules' centers would be aligned to the origin.\n"
+          "                 Accepted values are arbitrary combinations of 'b' and 'a'\n"
+          "                 for 'before' and 'after' respectively. Note that the\n"
+          "                 symmetry screening relies on the conformers being aligned\n"
+          "                 in some uniform fashion.\n"
           ;
       }
 
@@ -230,12 +250,12 @@ namespace OpenBabel
       virtual bool Do(OBBase* pOb, const char* OptionText, OpMap* pmap, OBConversion*);
       
       void DisplayConfig(OBConversion* pConv);
-      void Run(OBConversion* pConv, OBMol* pmol);
+      bool Run(OBConversion* pConv, OBMol* pmol);
       double rmsd_cutoff;
       double energy_cutoff;
-      double lowest_energy;
-      bool lowest_energy_given;
       bool verbose;
+      ALIGNING ssalign;
+      short int prec;
       string ffname;
       OBForceField *pff;
   };
@@ -248,18 +268,36 @@ namespace OpenBabel
   {
     cout << "..Input format  = " << pConv->GetInFormat()->GetID() << endl;
     cout << "..Output format = " << pConv->GetOutFormat()->GetID() << endl;
-    cout << "..RMSD cutoff   = " << rmsd_cutoff << endl;
+    if (rmsd_cutoff >= 0.0){
+        cout << "..RMSD cutoff   = " << rmsd_cutoff << endl;
+    }else{
+        cout << "..RMSD will be ignored for screening" << endl;
+    }
     if (energy_cutoff >= 0.0){
         cout << "..Energy cutoff = " << energy_cutoff << endl;
-        if (lowest_energy_given){
-            cout << "..Lowest energy = " << lowest_energy << endl;
-        }
-        else{
-            cout << "..Lowest energy will be determined" << endl;
-        }
+        cout << "..Lowest energy will be determined" << endl;
     }
     else{
         cout << "..Energy will be ignored for screening" << endl;
+    }
+    if (prec>=0){
+        cout << "..Check for symmetry will use " << prec << " decimal places" << endl;
+    }else{
+        cout << "..Not considering symmetry for screening" << endl;
+    }
+    switch (ssalign){
+        case never:
+            cout << "..Not aligning molecules prior to or after screening" << endl;
+            break;
+        case before:
+            cout << "..Aligning molecules prior to screening" << endl;
+            break;
+        case after:
+            cout << "..Aligning molecules after screening" << endl;
+            break;
+        case always:
+            cout << "..Aligning molecules prior to and after screening" << endl;
+            break;
     }
     cout << "..forcefield    = " << ffname << endl;
     cout << "..Verbose? " << (verbose ? "True" : "False") << endl;
@@ -272,12 +310,12 @@ namespace OpenBabel
     if(pConv && pConv->IsFirstInput())
     {
       pConv->AddOption("writeconformers", OBConversion::GENOPTIONS);
-      rmsd_cutoff = 0.5;
-      energy_cutoff = -100.0;
+      rmsd_cutoff = -1.0;
+      energy_cutoff = -1.0;
       ffname = "mmff94";
-      lowest_energy_given = false;
-      lowest_energy = 0.0;
+      prec = -1;
       verbose = false;
+      ssalign = never;
 
       OpMap::const_iterator iter;
       iter = pmap->find("rcutoff");
@@ -289,10 +327,33 @@ namespace OpenBabel
       iter = pmap->find("ffname");
       if(iter!=pmap->end())
         ffname = iter->second;
-      iter = pmap->find("emin");
+      iter = pmap->find("prec");
+      if(iter!=pmap->end())
+        prec = atoi(iter->second.c_str());
+      iter = pmap->find("ssalign");
       if(iter!=pmap->end()){
-        lowest_energy_given = true;
-        lowest_energy = atof(iter->second.c_str());
+        for (std::string::const_iterator it = iter->second.begin(); it!=iter->second.end(); ++it){
+            switch (*it){
+                case 'b':
+                    if       (ssalign == never){
+                        ssalign = before;
+                    }else{if (ssalign == after){
+                        ssalign = always;
+                    }}
+                    break;
+                case 'a':
+                    if       (ssalign == never){
+                        ssalign = after;
+                    }else{if (ssalign == before){
+                        ssalign = always;
+                    }}
+                    break;
+                default:
+                    cerr << "Accepted values for '--ssalign' are 'b' and 'a' and arbitrary combinations. Aborting." << endl;
+                    return false;
+                    break;
+            }
+        }
       }
       iter = pmap->find("verbose");
       if(iter!=pmap->end())
@@ -307,29 +368,53 @@ namespace OpenBabel
       DisplayConfig(pConv);
     }
 
-    Run(pConv, pmol);
-
-    return false;
+    return Run(pConv, pmol);
   }
 
-  void OpSimScreen::Run(OBConversion* pConv, OBMol* pmol)
+  bool OpSimScreen::Run(OBConversion* pConv, OBMol* pmol)
   {
     //OBMol mol = *pmol;
     
-    //mol.AddHydrogens(); //this should not be necessary for the screening
-    bool success = pff->Setup(*pmol);
-    if (!success) {
-      cout << "!!Cannot set up forcefield for this molecule\n"
-           << "!!Skipping\n" << endl;
-      return;
-    }
+    pmol->AddHydrogens();
     cout << endl << "..conformers before screening: " << pmol->NumConformers() << endl;
 
-    pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, lowest_energy, lowest_energy_given, verbose);
+    if (ssalign == before || ssalign == always){
+      if (verbose)
+        cout << "..aligning conformers prior to screening" << endl;
+      for (int i=pmol->NumConformers()-1; i>=0; --i){
+          pmol->SetConformer(i);
+          pmol->Align({0,0,0},{1,0,0},{0,1,0});
+      }
+    }
 
-    pff->GetConformers(*pmol);
+    bool success = pff->Setup(*pmol);
+    if (!success) {
+      cout << "!!Cannot set up forcefield for this molecule" << endl;
+      return false;
+    }
+
+    success = (pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, prec, verbose) == 0);
+    if (!success) {
+      cout << "!!Error in screening procedure for this molecule" << endl;
+      return false;
+    }
+
+    success = pff->GetConformers(*pmol);
+    if (!success) {
+      cout << "!!Error updating conformers for this molecule after screening" << endl;
+      return false;
+    }
 
     cout << "..conformers after screening: " << pmol->NumConformers() << endl;
+
+    if (ssalign == after || ssalign == always){
+      if (verbose)
+        cout << "..aligning conformers after screening" << endl;
+      for (int i=pmol->NumConformers()-1; i>=0; --i){
+          pmol->SetConformer(i);
+          pmol->Align({0,0,0},{1,0,0},{0,1,0});
+      }
+    }
 
     for (unsigned int c = 0; c < pmol->NumConformers(); ++c) {
       pmol->SetConformer(c);
@@ -340,6 +425,8 @@ namespace OpenBabel
         pmol->SetConformer(0);
     }
     cout << endl;
+
+    return true;
 
   }
 

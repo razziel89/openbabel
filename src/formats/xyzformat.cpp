@@ -309,3 +309,114 @@ namespace OpenBabel
   }
 
 } //namespace OpenBabel
+
+namespace OpenBabel
+{
+
+  class MultiXYZFormat : public OBMoleculeFormat
+  {
+  public:
+    //Register this format type ID
+    MultiXYZFormat()
+    {
+      OBConversion::RegisterFormat("multixyz", this, "chemical/x-xyz");
+    }
+
+    virtual const char* Description() //required
+    {
+      return
+        "XYZ cartesian coordinates format - one conformer per frame \n"
+        "Each frame will be read in as a conformer belonging to the same molecule\n"
+        "and not as separate molecules. This means that all frames must contain\n"
+        "the same number and types of atoms (only the former will be checked, however).\n"
+        "Please access description for XYZ-format to get more information.\n";
+    };
+
+    virtual const char* SpecificationURL()
+    {return "http://openbabel.org/wiki/XYZ";}; //optional
+
+    virtual const char* GetMIMEType()
+    { return "chemical/x-xyz"; };
+
+    //*** This section identical for most OBMol conversions ***
+    ////////////////////////////////////////////////////
+    /// The "API" interface functions
+    virtual bool ReadMolecule(OBBase* pOb, OBConversion* pConv);
+    virtual bool WriteMolecule(OBBase* pOb, OBConversion* pConv);
+  };
+  //***
+
+  //Make an instance of the format class
+  MultiXYZFormat theMultiXYZFormat;
+
+  /////////////////////////////////////////////////////////////////
+  bool MultiXYZFormat::ReadMolecule(OBBase* pOb, OBConversion* pConv) 
+  {
+    bool not_last = true;
+    istream &ifs  = *pConv->GetInStream();
+
+    OBMol* pmol = pOb->CastAndClear<OBMol>();
+    if(pmol==NULL)
+      return false;
+
+    not_last      = theXYZFormat.ReadMolecule(pmol, pConv);
+    if (!not_last){
+        return false;
+    }
+    OBMol tempmol = OBMol(*pmol);
+
+    if (ifs.peek() == EOF || !ifs.good()){
+        not_last = false;
+    }
+
+    while (not_last){
+        not_last     = theXYZFormat.ReadMolecule(&tempmol, pConv);
+        //For whatever reason the above method that reads a single xyz-file
+        // does seem to be skipping to the end of file but it does not correctly
+        // skip when EOF was reached. Hence, I do this here.
+        if(not_last){
+            if(tempmol.NumAtoms()!=pmol->NumAtoms()){
+                obErrorLog.ThrowError(__FUNCTION__,
+                    "Problems reading a multiXYZ file: not all frames have the same number of atoms.", obWarning);
+                return false;
+            }
+            pmol->AddConformer(tempmol.GetCoordinates(),true);
+        }
+        else{
+            return false;
+        }
+        if (ifs.peek() == EOF || !ifs.good()){
+            not_last = false;
+        }
+    }
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////
+
+  bool MultiXYZFormat::WriteMolecule(OBBase* pOb, OBConversion* pConv)
+  {
+    OBMol* pmol = dynamic_cast<OBMol*>(pOb);
+    if(pmol==NULL)
+      return false;
+    bool result = true;
+    //Since nothing changes when writing output, use the same method but output all
+    // conformers.
+    if (not(pConv->IsOption("writeconformers", OBConversion::GENOPTIONS))){
+        //careful: if the user set --writeconformers, this function is called once
+        // per conformer
+        for (int conf_count = 0; conf_count < pmol->NumConformers(); ++conf_count){
+            pmol->SetConformer(conf_count);
+            result = theXYZFormat.WriteMolecule(pmol, pConv);
+            if (!result){
+                return false;
+            }
+        }
+        return true;
+    }
+    else{
+        return theXYZFormat.WriteMolecule(pmol, pConv);
+    }
+  }
+
+} //namespace OpenBabel
