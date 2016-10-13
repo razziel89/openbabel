@@ -226,7 +226,6 @@ namespace OpenBabel
           "  options:\n"
           "    --rcutoff #  RMSD cutoff (default: do not use)\n"
           "    --ecutoff #  Energy cutoff (default: do not use)\n"
-          "    --emin #     Manually declare the global minimum energy \n"
           "    --ffname #   Name of the force field to use (default mmff94)\n"
           "    --prec #     Number of decimal places used for determination\n"
           "                 of equivalence due to symmetry. A high value reduces\n"
@@ -251,11 +250,9 @@ namespace OpenBabel
       virtual bool Do(OBBase* pOb, const char* OptionText, OpMap* pmap, OBConversion*);
       
       void DisplayConfig(OBConversion* pConv);
-      void Run(OBConversion* pConv, OBMol* pmol);
+      bool Run(OBConversion* pConv, OBMol* pmol);
       double rmsd_cutoff;
       double energy_cutoff;
-      double lowest_energy;
-      bool lowest_energy_given;
       bool verbose;
       ALIGNING ssalign;
       short int prec;
@@ -278,12 +275,7 @@ namespace OpenBabel
     }
     if (energy_cutoff >= 0.0){
         cout << "..Energy cutoff = " << energy_cutoff << endl;
-        if (lowest_energy_given){
-            cout << "..Lowest energy = " << lowest_energy << endl;
-        }
-        else{
-            cout << "..Lowest energy will be determined" << endl;
-        }
+        cout << "..Lowest energy will be determined" << endl;
     }
     else{
         cout << "..Energy will be ignored for screening" << endl;
@@ -321,8 +313,6 @@ namespace OpenBabel
       rmsd_cutoff = -1.0;
       energy_cutoff = -1.0;
       ffname = "mmff94";
-      lowest_energy_given = false;
-      lowest_energy = 0.0;
       prec = -1;
       verbose = false;
       ssalign = never;
@@ -365,11 +355,6 @@ namespace OpenBabel
             }
         }
       }
-      iter = pmap->find("emin");
-      if(iter!=pmap->end()){
-        lowest_energy_given = true;
-        lowest_energy = atof(iter->second.c_str());
-      }
       iter = pmap->find("verbose");
       if(iter!=pmap->end())
         verbose = true;
@@ -383,49 +368,52 @@ namespace OpenBabel
       DisplayConfig(pConv);
     }
 
-    Run(pConv, pmol);
-
-    return false;
+    return Run(pConv, pmol);
   }
 
-  void OpSimScreen::Run(OBConversion* pConv, OBMol* pmol)
+  bool OpSimScreen::Run(OBConversion* pConv, OBMol* pmol)
   {
     //OBMol mol = *pmol;
     
-    //mol.AddHydrogens(); //this should not be necessary for the screening
-    bool success = pff->Setup(*pmol);
-    if (!success) {
-      cout << "!!Cannot set up forcefield for this molecule\n"
-           << "!!Skipping\n" << endl;
-      return;
-    }
-
+    pmol->AddHydrogens();
     cout << endl << "..conformers before screening: " << pmol->NumConformers() << endl;
 
     if (ssalign == before || ssalign == always){
       if (verbose)
         cout << "..aligning conformers prior to screening" << endl;
-      for (int i=0; i<pmol->NumConformers(); ++i){
+      for (int i=pmol->NumConformers()-1; i>=0; --i){
           pmol->SetConformer(i);
           pmol->Align({0,0,0},{1,0,0},{0,1,0});
       }
-      pmol->SetConformer(0);
     }
 
-    pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, lowest_energy, lowest_energy_given, prec, verbose);
+    bool success = pff->Setup(*pmol);
+    if (!success) {
+      cout << "!!Cannot set up forcefield for this molecule" << endl;
+      return false;
+    }
 
-    pff->GetConformers(*pmol);
+    success = (pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, prec, verbose) == 0);
+    if (!success) {
+      cout << "!!Error in screening procedure for this molecule" << endl;
+      return false;
+    }
+
+    success = pff->GetConformers(*pmol);
+    if (!success) {
+      cout << "!!Error updating conformers for this molecule after screening" << endl;
+      return false;
+    }
 
     cout << "..conformers after screening: " << pmol->NumConformers() << endl;
 
     if (ssalign == after || ssalign == always){
       if (verbose)
         cout << "..aligning conformers after screening" << endl;
-      for (int i=0; i<pmol->NumConformers(); ++i){
+      for (int i=pmol->NumConformers()-1; i>=0; --i){
           pmol->SetConformer(i);
           pmol->Align({0,0,0},{1,0,0},{0,1,0});
       }
-      pmol->SetConformer(0);
     }
 
     for (unsigned int c = 0; c < pmol->NumConformers(); ++c) {
@@ -437,6 +425,8 @@ namespace OpenBabel
         pmol->SetConformer(0);
     }
     cout << endl;
+
+    return true;
 
   }
 

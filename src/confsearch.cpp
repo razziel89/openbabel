@@ -300,7 +300,7 @@ vector<vector3> GetHeavyAtomCoords(const OBMol* mol, const vector<vector3> &all_
 
 //void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose,
 //        bool precise=true, std::vector<int>* new_confs=NULL) {
-void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose, bool precise=true) {
+void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePoses* divposes, bool verbose, bool precise=true, bool sort=true) {
 
   OBDiversePoses::Tree* poses = divposes->GetTree();
   double cutoff = divposes->GetCutoff();
@@ -314,7 +314,8 @@ void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePos
       confs.push_back(*node);
 
   // Sort the confs by energy (lowest first)
-  sort(confs.begin(), confs.end(), sortpred_b);
+  if (sort)
+    std::sort(confs.begin(), confs.end(), sortpred_b);
 
   if(verbose)
     cout << "....tree size = " << divposes->GetSize() <<  " confs = " << confs.size() << "\n";
@@ -337,6 +338,7 @@ void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePos
   //    new_confs->reserve(newconfs.size());
   //}
   // Add confs to the molecule's conformer data and add the energies to molecules's energies
+  energies.reserve(energies.size()+newconfs.size());
   for (vpp::iterator chosen = newconfs.begin(); chosen!=newconfs.end(); ++chosen) {
     energies.push_back(chosen->second);
 
@@ -479,18 +481,16 @@ bool sort_4d(pair_str_idx p1, pair_str_idx p2){
     return (p1.first.compare(p2.first))<0;
 }
 
-int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_given, short prec, bool verbose)
+int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbose)
   {
-    _energies.clear(); // Wipe any energies from previous algorithms
     
     if (_mol.NumConformers()<=0){
-        SetupPointers();
-        _energies.push_back(Energy(false));
-        return 0;
+        std::cerr << "ERROR: no conformers in given molecule, cannot perform similarity screening." << std::endl;
+        return 1;
     }
 
+    _energies.clear(); // Wipe any energies from previous algorithms
     _energies.reserve(_mol.NumConformers());
-    _mol.SetConformer(0);
     
     bool escreening = egap > 0.0 ? true : false;
     bool rmsdscreening = rmsd > 0.0 ? true : false;
@@ -505,38 +505,30 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_
     }
 
     double lowest_energy;
-    if (emin_given){
-        lowest_energy = emin;
-    }
-    else{
+    if (escreening){
+        _mol.SetConformer(0);
         SetupPointers();
         lowest_energy = Energy(false); // Energy(false) means "do not evaluate gradients"
         //Determine energies of all conformers if screening by energies is desired.
         //Add all zeros otherwise.
-        if (escreening){
-            double temp_energy;
-            for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
-                _mol.SetConformer(conf_count);
-                SetupPointers();
-                temp_energy = Energy(false);
-                if (temp_energy < lowest_energy){
-                    lowest_energy = temp_energy;
-                }
-                _energies.push_back(temp_energy);
+        double temp_energy;
+        for (int conf_count = 1; conf_count < _mol.NumConformers(); ++conf_count){
+            _mol.SetConformer(conf_count);
+            SetupPointers();
+            temp_energy = Energy(false);
+            if (temp_energy < lowest_energy){
+                lowest_energy = temp_energy;
             }
+            _energies.push_back(temp_energy);
         }
     }
-    if (emin_given || !escreening){
-        for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
-            _energies.push_back(0.0);
-        }
+    else{
+        //_energies has been resized to hold at least _mol.NumConformers() numbers
+        std::fill(_energies.begin(), _energies.begin()+_mol.NumConformers(), 0.0);
     }
-
-    int origLogLevel = _loglvl;
 
     OBDiversePoses divposes(_mol, rmsd, false);
 
-    // Main loops over conformers
     if (verbose){
         if (escreening){
             puts("Using energy screening.");
@@ -555,8 +547,9 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_
         }
     }
     double sym_rmsd = rmsd;
-    if (!rmsdscreening){
-        std::cerr << "WARNING: no RMSD set but one is required for the symmetry screening. Will use 0.01." << std::endl;
+    if (!rmsdscreening && symscreening){
+        std::cerr << "WARNING: no RMSD set but one is required for symmetry screening. Will use 0.01 for symmetry screening."
+            << std::endl;
         sym_rmsd = 0.01;
     }
     
@@ -576,10 +569,12 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_
     maptype order_map;
     maptype::iterator it;
 
+    // Main loops over conformers
     for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
 
         bool screened = false;
         _mol.SetConformer(conf_count);
+        SetupPointers();
 
         // sort the atoms in the conformer to screen for symmetry
         if (symscreening){
@@ -682,16 +677,10 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_
             }
         }
 
-        SetupPointers();
+        //SetupPointers();
         double currentE = 0.0;
         if (!screened && escreening){
-            if (emin_given){
-                currentE = Energy(false);
-                _energies[conf_count] = currentE;
-            }
-            else{
-                currentE = _energies[conf_count];
-            }
+            currentE = _energies[conf_count];
             screened = (currentE >= lowest_energy + egap);
         }
         // don't retain poses if:
@@ -710,9 +699,10 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_
 
     //std::vector<int> new_confs;
     _mol.SetConformer(0);
+    SetupPointers();
     // Get results from the tree
     //UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, &new_confs);
-    UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false);
+    UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, escreening);
 
     //for (std::vector<int>::iterator it = new_confs.begin(); it!=new_confs.end(); ++it){
     //    cout << *it << endl;
@@ -720,9 +710,11 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, double emin, bool emin_
 
     //Delete all old conformers from molecule and their associated energies
     _mol.DeleteConformers(0,nr_confs-1);
-    _energies.erase(_energies.begin(),_energies.begin()+nr_confs);
+    _energies.clear();
+    //_energies.erase(_energies.begin(),_energies.begin()+nr_confs);
 
     _mol.SetConformer(0);
+    SetupPointers();
 
     return 0;
  }

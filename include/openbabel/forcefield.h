@@ -1180,10 +1180,12 @@ namespace OpenBabel
     int DiverseConfGen(double rmsd, unsigned int nconfs = 0, double energy_gap = 50, bool verbose = false);
     //! \brief Screen a set of conformers in a molecule by their rmsd to get a highly diverse set.
     //!
-    //! Conformers that are retained have to have an energy at max egap above emin. If egap<0, this
-    //! behaviour is switched off. If emin_given==false, emin will be ignored and determined using
-    //! the forcefield. If prec>=0, screening by symmetry will also be performed.
-    int ScreenByRMSD(double rmsd, double egap, double emin, bool emin_given, short prec, bool verbose = false);
+    //! Conformers that are retained have to have an energy at max egap above the minimum energy.
+    //! If egap<0, this behaviour is switched off. Otherwise, the minimum energy is determined using
+    //! the forcefield. If prec>=0, screening by symmetry will also be performed and prec is the number
+    //! of decimal places that is used to determine whether conformers are symmetry equivalent. Note that
+    //! this relies on the conformers being aligned in some uniform way.
+    int ScreenByRMSD(double rmsd, double egap, short prec, bool verbose = false);
 #endif
 
     /////////////////////////////////////////////////////////////////////////
