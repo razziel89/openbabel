@@ -286,7 +286,8 @@ namespace OpenBabel
   //bool sortpred_b(const OBDiversePoses::PoseTriple& a, const OBDiversePoses::PoseTriple& b) {
   //  return (a.second < b.second);
   //}
-  bool sortpred_b(const OBDiversePoses::PosePair& a, const OBDiversePoses::PosePair& b) {
+  template <typename T>
+  bool sort_by_second(const T& a, const T& b) {
     return (a.second < b.second);
   }
 
@@ -315,7 +316,7 @@ void UpdateConformersFromTree(OBMol* mol, vector<double> &energies, OBDiversePos
 
   // Sort the confs by energy (lowest first)
   if (sort)
-    std::sort(confs.begin(), confs.end(), sortpred_b);
+    std::sort(confs.begin(), confs.end(), sort_by_second<OBDiversePoses::PosePair>);
 
   if(verbose)
     cout << "....tree size = " << divposes->GetSize() <<  " confs = " << confs.size() << "\n";
@@ -552,6 +553,11 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
             << std::endl;
         sym_rmsd = 0.01;
     }
+
+    //if not using rmsdscreening (i.e., when not using the tree), save the conformers
+    //to be copied over to this data structure to save A LOT OF memory
+    typedef std::deque<std::pair<double*,double> > FakeTree;
+    FakeTree fake_tree;
     
     // the information about every conformer that has the associated hash
     // the information is: conformer number and sorted atom order
@@ -567,7 +573,6 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
             > maptype;
 
     maptype order_map;
-    maptype::iterator it;
 
     // Main loops over conformers
     for (int conf_count = 0; conf_count < _mol.NumConformers(); ++conf_count){
@@ -576,8 +581,14 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
         _mol.SetConformer(conf_count);
         SetupPointers();
 
+        double currentE = 0.0;
+        if (escreening){
+            currentE = _energies[conf_count];
+            screened = (currentE >= lowest_energy + egap);
+        }
+
         // sort the atoms in the conformer to screen for symmetry
-        if (symscreening){
+        if (!screened && symscreening){
             int nr_hvy_atoms = _mol.NumHvyAtoms();
             std::hash<std::string> hash_fn;
             std::size_t geom_hash;
@@ -617,7 +628,7 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
             hash_info order_element;
             order_element = std::make_pair(conf_count,atom_order);
 
-            it = order_map.find(geom_hash);
+            maptype::iterator it = order_map.find(geom_hash);
             if (it != order_map.end()){
                 // If they share a hash, they still have to be checked for strict identity
                 // with respect to the given RMSD (since the hashes can be equivalent just by accident).
@@ -677,18 +688,16 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
             }
         }
 
-        //SetupPointers();
-        double currentE = 0.0;
-        if (!screened && escreening){
-            currentE = _energies[conf_count];
-            screened = (currentE >= lowest_energy + egap);
-        }
-        // don't retain poses if:
-        //  - pose is symmetry equivalent to one that has already been processed
+        // don't retain poses if at least one of:
         //  - energy too high
+        //  - pose is symmetry equivalent to one that has already been processed
         if (!screened) {
             // screening with respect to RMSD will be performed here (if rmsd>0.0)
-            divposes.AddPose(_mol.GetCoordinates(), currentE/*, conf_count*/);
+            if (rmsdscreening){
+                divposes.AddPose(_mol.GetCoordinates(), currentE/*, conf_count*/);
+            }else{
+                fake_tree.push_back(std::make_pair(_mol.GetCoordinates(), currentE));
+            }
         }
 
     }
@@ -700,9 +709,20 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
     //std::vector<int> new_confs;
     _mol.SetConformer(0);
     SetupPointers();
-    // Get results from the tree
-    //UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, &new_confs);
-    UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, escreening);
+    if (rmsdscreening){
+        // Get results from the tree
+        //UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, &new_confs);
+        UpdateConformersFromTree(&_mol, _energies, &divposes, verbose, false, escreening);
+    }else{
+        _energies.reserve(_energies.size()+fake_tree.size());
+        if (escreening){
+            std::sort(fake_tree.begin(), fake_tree.end(), sort_by_second<std::pair<double*,double> >);
+        }
+        for (FakeTree::iterator it = fake_tree.begin(); it!=fake_tree.end(); ++it){
+            _mol.AddConformer(it->first,true);
+            _energies.push_back(it->second);
+        }
+    }
 
     //for (std::vector<int>::iterator it = new_confs.begin(); it!=new_confs.end(); ++it){
     //    cout << *it << endl;
