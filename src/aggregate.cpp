@@ -525,6 +525,29 @@ namespace OpenBabel
       return _connections.size();
   }
 
+  //! Get a representation of which atoms belong to which molecules.
+  std::string OBAggregate::GetConnections(){
+      if (_needRefresh){
+          FindAllConnections();
+      }
+      std::stringstream ss;
+      vector<vector<OBAtom*>* >::iterator outer_it;
+      vector<OBAtom*>::iterator inner_it;
+      int molcount = 0;
+      for (outer_it = _connections.begin(); outer_it != _connections.end(); ++outer_it){
+        ss << molcount;
+        int id = -1;
+        int elements = 0;
+        for (inner_it = (*outer_it)->begin(); inner_it != (*outer_it)->end(); ++inner_it){
+            OBAtom* atom = *inner_it;
+            ss << " " << atom->GetIdx();
+        }
+        ss << "\n";
+        ++molcount;
+      }
+      return ss.str();
+  }
+
   //! Print which atoms belong to which molecules.
   void OBAggregate::PrintConnections(){
       if (_needRefresh){
@@ -648,6 +671,58 @@ namespace OpenBabel
       return true;
   }
 
+  //! Get a simple representation of which molecules belong to which tags.
+  std::string OBAggregate::GetTags(){
+      if (not(_useTag)){
+          std::cerr << "ERROR: Aggregate not configured to use tags.";
+          return "";
+      }
+      if (_needRefresh){
+          FindAllConnections();
+      }
+      
+      std::vector<bool> checked;
+      std::vector<bool>::iterator bool_it;
+      checked.reserve(_nrMolecules);
+      for (int i=0; i<_nrMolecules; ++i){
+          checked.push_back(false);
+      }
+
+      std::stringstream ss;
+
+      std::vector<vector<int> >::iterator outer_it;
+      std::vector<int>::iterator inner_it;
+
+      int tagged = 0;
+      int tagcount = 0;
+      for (outer_it = _molTags.begin(); outer_it != _molTags.end(); ++outer_it){
+          if ( outer_it->size() > 0 ){
+              ss << tagcount;
+              for (inner_it = outer_it->begin(); inner_it != outer_it->end(); ++inner_it){
+                  ss << " " << *inner_it;
+                  checked[*inner_it] = true;
+                  ++tagged;
+              }
+              ++tagcount;
+              ss << "\n";
+          }
+      }
+
+      if ( tagged < _nrMolecules ){
+          ss << "-1";
+          int molcount = 0;
+          for (bool_it = checked.begin(); bool_it != checked.end(); ++bool_it){
+              if ( not(*bool_it) ){
+                  ss << " " << molcount;
+              }
+              ++molcount;
+          }
+          ss << "\n";
+      }
+
+      return ss.str();
+  }
+
   //! Create a new tag (index is returned) and optionally reserve space
   //! for a certain number of molecules.
   int OBAggregate::CreateTag(int nr_elements){
@@ -672,7 +747,7 @@ namespace OpenBabel
       if (not(_useTag)){
           return false;
       }
-      if (tag >= _molTags.size()){
+      if (tag >= _molTags.size() || tag<0){
           return false;
       }
 

@@ -92,11 +92,22 @@ namespace OpenBabel
 
     //! \name Aggregate information printing methods
     //@{
-    //!!Print out a simple representation of which atoms belong to which molecule
+    //! Print out a simple representation of which atoms belong to which molecule
 	void PrintConnections();
-    //!Print out a simple representation of which molecules belong to which tag
-    //!Returns true on success and false otherwise
+    //! Get a simple representation of which atoms belong to which molecule.
+    //!
+    //! The string can easily be parsed. Newlines separate molecules and spaces the
+    //! atoms in each molecule. The first number per line is the molecule count.
+    std::string GetConnections();
+    //! Print out a simple representation of which molecules belong to which tag
+    //! Returns true on success and false otherwise
     bool PrintTags();
+    //! Get a simple representation of which molecules belong to which tag.
+    //!
+    //! The string can easily be parsed. Newlines separate tags and spaces
+    //! the molecules per tag. The special tag "-1" denotes untagged molecules.
+    //! Returns true on success and false otherwise
+    std::string GetTags();
     //@}
     
     //! \name Aggregate information getting methods
@@ -107,7 +118,9 @@ namespace OpenBabel
     int GetNrTags();
     //!Return the value of _useTag
     bool GetUseTag();
-    //! Get the center of a part (i.e. molecule or tag) of the aggregate
+    //! Get the center of a part (i.e. molecule or tag) of the aggregate.
+    //!
+    //!Part numbers start at 0.
     vector3 GetCenterPart(int part);
     //@}
 
