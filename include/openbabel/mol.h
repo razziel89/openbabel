@@ -237,11 +237,11 @@ enum HydrogenType { AllHydrogen, PolarHydrogen, NonPolarHydrogen };
     void Align(std::vector<OBAtom*> &atom_vec, const vector3 p, const vector3 v1, const vector3 v2);
     //! Set the dihedral angle defined by the four atom indices to angle
     //! A cis-configurations corresponds to angle=0 whereas a trans configuration corresponds to angle=180
-    bool SetDihedralAngle(const double idxa1, const double idxa2, const double idxa3, const double idxa4, const double angle);
+    bool SetDihedralAngle(const int idxa1, const int idxa2, const int idxa3, const int idxa4, const double angle);
     //! Set the angle defined by three atoms to angle
     //! Atom 1 will be kept fixed in its position
-    bool SetAngle(const double idxa1, const double idxa2, const double idxa3, const double angle);
-    double GetAngle(const double idxa1, const double idxa2, const double idxa3);
+    bool SetAngle(const int idxa1, const int idxa2, const int idxa3, const double angle);
+    double GetAngle(const int idxa1, const int idxa2, const int idxa3);
     //! Parts the molecule using a plane in Hessian normal form
     //! WARNING: bonds will not be copied over
     void PartMolecule(OBMol &dest, const double direction[3], const double point[3]);

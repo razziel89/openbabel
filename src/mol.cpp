@@ -2255,7 +2255,7 @@ namespace OpenBabel
   //! Set the dihedral angle around the bond between atoms 2 and 3 to angle.
   //! The direction is defined by atoms 1 and 4. A dihedral angle of 0 means a
   //! cis-configuration whereas 180 means a trans configuration.
-  bool OBMol::SetDihedralAngle(const double idxa1, const double idxa2, const double idxa3, const double idxa4, const double angle)
+  bool OBMol::SetDihedralAngle(const int idxa1, const int idxa2, const int idxa3, const int idxa4, const double angle)
   {
     OBBond *bond;
     OBAtom *a1, *a2, *a3, *a4;
@@ -2278,7 +2278,7 @@ namespace OpenBabel
   //!
   //! Change the bond defined by the three atom indices to the value given by angle.
   //! The first atom is kept fixed and everything attached to the second one is moved.
-  bool OBMol::SetAngle(const double idxa1, const double idxa2, const double idxa3, const double angle)
+  bool OBMol::SetAngle(const int idxa1, const int idxa2, const int idxa3, const double angle)
   {
     vector<int> children;
     vector3 tempvec, translation, v1, v2, n;
@@ -2336,7 +2336,7 @@ namespace OpenBabel
   //! \brief Get an angle.
   //!
   //! The bond is defined by the three atom indices.
-  double OBMol::GetAngle(const double idxa1, const double idxa2, const double idxa3)
+  double OBMol::GetAngle(const int idxa1, const int idxa2, const int idxa3)
   {
     vector3 v1, v2, n;
     OBAtom *a1, *a2, *a3;
