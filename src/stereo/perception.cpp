@@ -2868,7 +2868,11 @@ namespace OpenBabel {
 
   void StereoRefToImplicit(OBMol& mol, OBStereo::Ref atomId) {
     // The following is for use in replace_if(...) below
-    const std::binder1st<std::equal_to<OBStereo::Ref> > equal_to_atomId = std::bind1st (equal_to<OBStereo::Ref>(), atomId);
+    //const std::binder1st<std::equal_to<OBStereo::Ref> > equal_to_atomId = std::bind1st (equal_to<OBStereo::Ref>(), atomId);
+    // replaced deprecated std::binder1st by std::bind
+    const std::function<bool(OBStereo::Ref)> equal_to_atomId = std::bind(std::equal_to<OBStereo::Ref>(), std::placeholders::_1, atomId);
+    // this should be the appropriate lambda equivalent if the C++ standard should be bumped OR std::bind becoming deprecated
+    //const std::function<bool(int)> equal_to_atomId = [atomId](int otherId)->bool{return std::equal_to<OBStereo::Ref(atomId, otherId);};
 
     std::vector<OBGenericData*> vdata = mol.GetAllData(OBGenericDataType::StereoData);
     for (std::vector<OBGenericData*>::iterator data = vdata.begin(); data != vdata.end(); ++data) {
@@ -2900,7 +2904,9 @@ namespace OpenBabel {
 
   void ImplicitRefToStereo(OBMol& mol, OBStereo::Ref centerId, OBStereo::Ref newId) {
     // The following is for use in replace_if(...) below
-    const std::binder1st<std::equal_to<OBStereo::Ref> > equal_to_implicitRef = std::bind1st (equal_to<OBStereo::Ref>(), (OBStereo::Ref) OBStereo::ImplicitRef);
+    //const std::binder1st<std::equal_to<OBStereo::Ref> > equal_to_implicitRef = std::bind1st (equal_to<OBStereo::Ref>(), (OBStereo::Ref) OBStereo::ImplicitRef);
+    // replaced deprecated std::binder1st by std::bind
+    const std::function<bool(OBStereo::Ref)> equal_to_implicitRef = std::bind(std::equal_to<OBStereo::Ref>(), std::placeholders::_1, (OBStereo::Ref) OBStereo::ImplicitRef);
 
     std::vector<OBGenericData*> vdata = mol.GetAllData(OBGenericDataType::StereoData);
     for (std::vector<OBGenericData*>::iterator data = vdata.begin(); data != vdata.end(); ++data) {
