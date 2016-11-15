@@ -2172,7 +2172,7 @@ namespace OpenBabel
   //! The molecule's center is first aligned to a point and it's then rotated so that
   //! its third and second main axes are aligned in the specified directions.
   //! All coordinates have to be given as vector3.
-  void OBMol::Align(vector<OBAtom*> &atom_vec, const vector3 p, const vector3 v1, const vector3 v2)
+  void OBMol::Align(vector<OBAtom*> &atom_vec, const vector3 p, const vector3 v1, const vector3 v2, const OBBitVec mask)
   {
     matrix3x3 matrix, tempmatrix; 
     vector3 eigenvals, tempvec, main1, main2;
@@ -2182,8 +2182,24 @@ namespace OpenBabel
     OBAtom *atom;
     vector<OBAtom*>::iterator i;
 
+    vector<OBAtom*> align_vec;
+
+    if (mask.Empty()){
+      align_vec = atom_vec;
+    }else{
+      align_vec.reserve(mask.CountBits());
+      for (int i=mask.FirstBit(); i!=mask.EndBit(); i=mask.NextBit(i)){
+        if (i>=1 && i<=atom_vec.size()){
+          align_vec.push_back(atom_vec[i-1]);
+        }else{
+          std::cerr << "ERROR: aligning mask index " << i << " out of bounds (1 to " << atom_vec.size() << ")" << std::endl;
+          return;
+        }
+      }
+    }
+
     int elements = 0;
-    for (i = atom_vec.begin(); *i != NULL && i != atom_vec.end(); ++i)
+    for (i = align_vec.begin(); *i != NULL && i != align_vec.end(); ++i)
     {
       center += (*i)->GetVector();
       ++elements;
@@ -4667,10 +4683,14 @@ namespace OpenBabel
     AssignSpinMultiplicity(true);
     }
 
-  void OBMol::Center()
+  void OBMol::Center(bool current)
   {
-    for (int i = 0;i < NumConformers();++i)
-      Center(i);
+    if (current){
+      Center(-1);
+    }else{
+      for (int i = 0;i < NumConformers();++i)
+        Center(i);
+    }
   }
 
   vector3 OBMol::Center(int nconf)
@@ -4678,7 +4698,8 @@ namespace OpenBabel
     obErrorLog.ThrowError(__FUNCTION__,
                           "Ran OpenBabel::Center", obAuditMsg);
 
-    SetConformer(nconf);
+    if (nconf>=0)
+      SetConformer(nconf);
 
     OBAtom *atom;
     vector<OBAtom*>::iterator i;
@@ -4706,7 +4727,6 @@ namespace OpenBabel
 
     return(v);
   }
-
 
   /*! this method adds the vector v to all atom positions in all conformers */
   void OBMol::Translate(const vector3 &v)
