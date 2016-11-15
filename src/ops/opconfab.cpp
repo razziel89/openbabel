@@ -228,8 +228,8 @@ namespace OpenBabel
           "    --ecutoff #  Energy cutoff (default: do not use)\n"
           "    --ffname #   Name of the force field to use (default mmff94)\n"
           "    --prec #     Number of decimal places used for determination\n"
-          "                 of equivalence due to symmetry. A high value reduces\n"
-          "                 computational time but increases risk of getting\n"
+          "                 of conformer equivalence due to symmetry. A high value\n"
+          "                 reduces computational time but increases risk of getting\n"
           "                 duplicates (default: do not use symmetry screening,\n"
           "                 highly recommended: 2 or 1)\n"
           "    --ssalign #  Automatically align all conformers prior to or after the\n"
@@ -425,6 +425,11 @@ namespace OpenBabel
         pmol->SetConformer(0);
     }
     cout << endl;
+
+    //Never have OpenBabel output anything after this. However, the boolean
+    //that is returned can still be used to check whether the screening
+    //finished successfully or not.
+    pConv->SetOutFormat("nul");
 
     return true;
 
