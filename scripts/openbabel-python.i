@@ -57,6 +57,7 @@
 #include <openbabel/isomorphism.h>
 #include <openbabel/query.h>
 #include <openbabel/canon.h>
+#include <openbabel/pointgroup.h>
 
 #include <openbabel/stereo/tetrahedral.h>
 #include <openbabel/stereo/cistrans.h>
@@ -171,6 +172,7 @@ VECTORTEMPLATE_WRAP(Vector3, OpenBabel::vector3)
 VVTEMPLATE_WRAP(Vector3, OpenBabel::vector3)
 VECTORTEMPLATE_WRAP(OBMol, OpenBabel::OBMol)
 VECTORTEMPLATE_WRAP(OBBond, OpenBabel::OBBond)
+VECTORTEMPLATE_WRAP(OBAtom, OpenBabel::OBAtom*)
 VECTORTEMPLATE_WRAP(OBResidue, OpenBabel::OBResidue)
 VECTORTEMPLATE_WRAP(OBRing, OpenBabel::OBRing)
 VECTORTEMPLATE_WRAP(pOBRing, OpenBabel::OBRing*)
@@ -312,6 +314,7 @@ OBMol.BeginResidues = OBMol.EndResidues = OBMol.BeginResidue = OBMol.EndResidue 
 %apply std::string& INPUT { std::string &end }   // Required for OBChemTsfm.Init
 %include <openbabel/phmodel.h>
 %include <openbabel/graphsym.h>
+%include <openbabel/pointgroup.h>
 %include <openbabel/isomorphism.h>
 %include <openbabel/query.h>
 %include <openbabel/canon.h>

@@ -150,8 +150,41 @@ namespace OpenBabel {
 
     typedef _SYMMETRY_ELEMENT_ SYMMETRY_ELEMENT;
 
-    PointGroupPrivate()
-    {
+  private:
+    void Free(){
+      if (DistanceFromCenter!=NULL){
+          free(DistanceFromCenter);
+      }
+      if (Planes!=NULL){
+          free(Planes);
+      }
+      if (MolecularPlane!=NULL){
+          free(MolecularPlane);
+      }
+      if (InversionCenters!=NULL){
+          free(InversionCenters);
+      }
+      if (NormalAxes!=NULL){
+          free(NormalAxes);
+      }
+      if (ImproperAxes!=NULL){
+          free(ImproperAxes);
+      }
+      if (NormalAxesCounts!=NULL){
+          free(NormalAxesCounts);
+      }
+      if (ImproperAxesCounts!=NULL){
+          free(ImproperAxesCounts);
+      }
+      if (PointGroupRejectionReason!=NULL){
+          free(PointGroupRejectionReason);
+      }
+      if (_ats!=NULL){
+          free(_ats);
+      }
+    }
+
+    void Initialize(){
       ToleranceSame         = 1e-1;
       TolerancePrimary      = 5e-1;
       ToleranceFinal        = 1e-1;
@@ -179,6 +212,8 @@ namespace OpenBabel {
       SymmetryCode          = "";
       PointGroupRejectionReason = NULL ;
 
+      _nrat                 = 0;
+      _ats                  = NULL;
       StatTotal             = 0 ;
       StatEarly             = 0 ;
       StatPairs             = 0 ;
@@ -190,7 +225,25 @@ namespace OpenBabel {
       Setup                 = false;
     }
 
-    OBMol  *               _mol;
+  public:
+
+    PointGroupPrivate()
+    {
+        Initialize();
+    }
+
+    void Clear(){
+        Free();
+        Initialize();
+    }
+
+    ~PointGroupPrivate()
+    {
+        Free();
+    }
+
+    OBAtom*                _ats;
+    unsigned int           _nrat                 ;
     double                 ToleranceSame         ;
     double                 TolerancePrimary      ;
     double                 ToleranceFinal        ;
@@ -250,7 +303,7 @@ namespace OpenBabel {
     establish_pairs( SYMMETRY_ELEMENT *elem )
     {
       unsigned int      i, j, best_j;
-      char *            atom_used = (char *)calloc( _mol->NumAtoms(), 1 ) ;
+      char *            atom_used = (char *)calloc( _nrat, 1 ) ;
       double            distance, best_distance ;
       OBAtom            symmetric;
       OBAtom            *atom;
@@ -261,17 +314,17 @@ namespace OpenBabel {
         //        fprintf( stderr, "Out of memory for tagging array in establish_pairs()\n" ) ;
         return 0;
       }
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
-        if( elem->transform[i] >= _mol->NumAtoms() ){ /* No symmetric atom yet          */
+      for( i = 0 ; i < _nrat ; i++ ){
+        if( elem->transform[i] >= _nrat ){ /* No symmetric atom yet          */
           if( verbose > 2 ) printf( "        looking for a pair for %d\n", i ) ;
-          elem->transform_atom( elem, _mol->GetAtom(i+1), &symmetric ) ;   // ATOM INDEX ISSUE
+          elem->transform_atom( elem, (_ats+i), &symmetric ) ;   // ATOM INDEX ISSUE
           if( verbose > 2 ) printf( "        new coordinates are: (%g,%g,%g)\n",
                                     symmetric.x(), symmetric.y(), symmetric.z() ) ;
           best_j        = i ;
           best_distance = 2*TolerancePrimary ;/* Performance value we'll reject */
-          for( j = 0 ; j < _mol->NumAtoms() ; j++ ){
+          for( j = 0 ; j < _nrat ; j++ ){
 
-            atom = _mol->GetAtom(j+1);
+            atom = (_ats+j);
             // START here
             if( atom_used[j] || !equivalentAtoms(*atom, symmetric) )
               continue ;
@@ -305,7 +358,7 @@ namespace OpenBabel {
     {
       unsigned int i, j, k;
 
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
+      for( i = 0 ; i < _nrat ; i++ ){
         if( elem->transform[i] == i )   /* Identity transform is Ok for any order */
           continue ;
         if( elem->transform_atom == rotate_reflect_atom ){
@@ -344,14 +397,14 @@ namespace OpenBabel {
 
       if( ( a->order != b->order ) || ( a->nparam != b->nparam ) || ( a->transform_atom != b->transform_atom ) )
         return 0 ;
-      for( i = 0, code = 1 ; i < _mol->NumAtoms() ; i++ ){
+      for( i = 0, code = 1 ; i < _nrat ; i++ ){
         if( a->transform[i] != b->transform[i] ){
           code = 0 ;
           break ;
         }
       }
       if( code == 0 && a->order > 2 ){  /* b can also be a reverse transformation for a */
-        for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
+        for( i = 0 ; i < _nrat ; i++ ){
           j = a->transform[i] ;
           if( b->transform[j] != i )
             return 0 ;
@@ -371,14 +424,14 @@ namespace OpenBabel {
         //        fprintf( stderr, "Out of memory allocating symmetry element\n" ) ;
         return NULL;
       }
-      elem->transform = (int*)calloc( _mol->NumAtoms(), sizeof( int ) ) ;
+      elem->transform = (int*)calloc( _nrat, sizeof( int ) ) ;
       if( elem->transform == NULL ){
         //        fprintf( stderr, "Out of memory allocating transform table for symmetry element\n" ) ;
         free(elem);
         return NULL;
       }
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
-        elem->transform[i] = _mol->NumAtoms() + 1 ; /* An impossible value */
+      for( i = 0 ; i < _nrat ; i++ ){
+        elem->transform[i] = _nrat + 1 ; /* An impossible value */
       }
       return elem ;
     }
@@ -400,11 +453,11 @@ namespace OpenBabel {
       OBAtom            symmetric ;
       double            r, max_r ;
 
-      for( i = 0, max_r = 0 ; i < _mol->NumAtoms() ; i++ ){
+      for( i = 0, max_r = 0 ; i < _nrat ; i++ ){
         j = elem->transform[i] ;
-        elem->transform_atom( elem, _mol->GetAtom(i+1), &symmetric ) ;
+        elem->transform_atom( elem, (_ats+i), &symmetric ) ;
 
-        r = symmetric.GetDistance(_mol->GetAtom(j+1));
+        r = symmetric.GetDistance((_ats+j));
         if( r > ToleranceFinal ){
           if( verbose > 0 ) printf( "        distance to symmetric atom (%g) is too big for %d\n", r, i ) ;
           return -1 ;
@@ -454,10 +507,10 @@ namespace OpenBabel {
           elem->direction[k] /= r ;
         }
       }
-      for( i = 0, target = maxr = 0 ; i < _mol->NumAtoms() ; i++ ){
-        elem->transform_atom( elem, _mol->GetAtom(i+1), &symmetric ) ;
+      for( i = 0, target = maxr = 0 ; i < _nrat ; i++ ){
+        elem->transform_atom( elem, (_ats+i), &symmetric ) ;
         j = elem->transform[i] ;
-        r = symmetric.GetDistance(_mol->GetAtom(j+1));
+        r = symmetric.GetDistance((_ats+j));
         if( r > maxr ) maxr = r ;
         target += r ;
       }
@@ -692,15 +745,15 @@ namespace OpenBabel {
       plane->order          = 2 ;
       plane->nparam         = 4 ;
 
-      dx[0]       = _mol->GetAtom(i+1)->x() - _mol->GetAtom(j+1)->x();
-      dx[1]       = _mol->GetAtom(i+1)->y() - _mol->GetAtom(j+1)->y();
-      dx[2]       = _mol->GetAtom(i+1)->z() - _mol->GetAtom(j+1)->z();
+      dx[0]       = (_ats+i)->x() - (_ats+j)->x();
+      dx[1]       = (_ats+i)->y() - (_ats+j)->y();
+      dx[2]       = (_ats+i)->z() - (_ats+j)->z();
 
-      midpoint[0] = ( _mol->GetAtom(i+1)->x() + _mol->GetAtom(j+1)->x() ) / 2.0 ;
-      midpoint[1] = ( _mol->GetAtom(i+1)->y() + _mol->GetAtom(j+1)->y() ) / 2.0 ;
-      midpoint[2] = ( _mol->GetAtom(i+1)->z() + _mol->GetAtom(j+1)->z() ) / 2.0 ;
+      midpoint[0] = ( (_ats+i)->x() + (_ats+j)->x() ) / 2.0 ;
+      midpoint[1] = ( (_ats+i)->y() + (_ats+j)->y() ) / 2.0 ;
+      midpoint[2] = ( (_ats+i)->z() + (_ats+j)->z() ) / 2.0 ;
 
-      rab        = _mol->GetAtom(i+1)->GetDistance(_mol->GetAtom(j+1));
+      rab        = (_ats+i)->GetDistance((_ats+j));
 
       if( rab < ToleranceSame ){
         //        fprintf( stderr, "Atoms %d and %d coincide (r = %g)\n", i, j, rab ) ;
@@ -745,11 +798,11 @@ namespace OpenBabel {
       for( k = 0 ; k < DIMENSION ; k++ )
         d0[k] = d1[k] = d2[k] = 0 ;
       d0[0] = 1 ; d1[1] = 1 ; d2[2] = 1 ;
-      for( i = 1 ; i < _mol->NumAtoms() ; i++ ){
+      for( i = 1 ; i < _nrat ; i++ ){
         for( j = 0 ; j < i ; j++ ){
-          p[0] = _mol->GetAtom(i+1)->x() - _mol->GetAtom(j+1)->x();
-          p[1] = _mol->GetAtom(i+1)->y() - _mol->GetAtom(j+1)->y();
-          p[2] = _mol->GetAtom(i+1)->z() - _mol->GetAtom(j+1)->z();
+          p[0] = (_ats+i)->x() - (_ats+j)->x();
+          p[1] = (_ats+i)->y() - (_ats+j)->y();
+          p[2] = (_ats+i)->z() - (_ats+j)->z();
 
           r = sqrt(SQUARE(p[0]) + SQUARE(p[1]) + SQUARE(p[2])); // distance between atoms i and j
 
@@ -795,7 +848,7 @@ namespace OpenBabel {
       for( k = 0, r = 0 ; k < DIMENSION ; k++ )
         r += CenterOfSomething[k]*plane->normal[k] ;
       plane->distance = r ;
-      for( k = 0 ; k < _mol->NumAtoms() ; k++ )
+      for( k = 0 ; k < _nrat ; k++ )
         plane->transform[k] = k ;
       if( refine_symmetry_element( plane, 0 ) < 0 ){
         if( verbose > 0 ) printf( "    refinement failed for the plane\n" ) ;
@@ -917,11 +970,11 @@ namespace OpenBabel {
       axis->nparam         = 7 ;
       for( k = 0 ; k < DIMENSION ; k++ )
         dir[k] = 0 ;
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
+      for( i = 0 ; i < _nrat ; i++ ){
 
-        rel[0] = _mol->GetAtom(i+1)->x() - CenterOfSomething[0];
-        rel[1] = _mol->GetAtom(i+1)->z() - CenterOfSomething[1];
-        rel[2] = _mol->GetAtom(i+1)->y() - CenterOfSomething[2];
+        rel[0] = (_ats+i)->x() - CenterOfSomething[0];
+        rel[1] = (_ats+i)->z() - CenterOfSomething[1];
+        rel[2] = (_ats+i)->y() - CenterOfSomething[2];
 
         s = rel[0]*dir[0] + rel[1]*dir[1] + rel[2]*dir[2];
 
@@ -952,7 +1005,7 @@ namespace OpenBabel {
         axis->normal[0] = 1 ;
       }
       axis->distance = s ;
-      for( k = 0 ; k < _mol->NumAtoms() ; k++ )
+      for( k = 0 ; k < _nrat ; k++ )
         axis->transform[k] = k ;
       if( refine_symmetry_element( axis, 0 ) < 0 ){
         if( verbose > 0 ) printf( "    refinement failed for the infinity axis\n" ) ;
@@ -978,8 +1031,8 @@ namespace OpenBabel {
       /* First, do a quick sanity check */
 
       vector3 supportVec(support[0], support[1], support[2]);
-      ris = vector3(_mol->GetAtom(i+1)->GetVector() - supportVec).length();
-      rjs = vector3(_mol->GetAtom(j+1)->GetVector() - supportVec).length();
+      ris = vector3((_ats+i)->GetVector() - supportVec).length();
+      rjs = vector3((_ats+j)->GetVector() - supportVec).length();
 
       if( fabs( ris - rjs ) > TolerancePrimary ){
         StatEarly++ ;
@@ -1004,9 +1057,9 @@ namespace OpenBabel {
       }
       axis->distance = r ;
 
-      center[0] = ( _mol->GetAtom(i+1)->x() + _mol->GetAtom(j+1)->x() ) / 2 - support[0] ;
-      center[1] = ( _mol->GetAtom(i+1)->y() + _mol->GetAtom(j+1)->y() ) / 2 - support[1] ;
-      center[2] = ( _mol->GetAtom(i+1)->z() + _mol->GetAtom(j+1)->z() ) / 2 - support[2] ;
+      center[0] = ( (_ats+i)->x() + (_ats+j)->x() ) / 2 - support[0] ;
+      center[1] = ( (_ats+i)->y() + (_ats+j)->y() ) / 2 - support[1] ;
+      center[2] = ( (_ats+i)->z() + (_ats+j)->z() ) / 2 - support[2] ;
       r = sqrt(SQUARE(center[0]) + SQUARE(center[1]) + SQUARE(center[2]));
 
       if( r <= TolerancePrimary ){ /* c2 is underdefined, let's do something special */
@@ -1018,9 +1071,9 @@ namespace OpenBabel {
         else {
           if( verbose > 0 ) printf( "    c2 is underdefined, trying random direction\n" ) ;
 
-          center[0] = _mol->GetAtom(i+1)->x() - _mol->GetAtom(j+1)->x();
-          center[1] = _mol->GetAtom(i+1)->y() - _mol->GetAtom(j+1)->y();
-          center[2] = _mol->GetAtom(i+1)->z() - _mol->GetAtom(j+1)->z();
+          center[0] = (_ats+i)->x() - (_ats+j)->x();
+          center[1] = (_ats+i)->y() - (_ats+j)->y();
+          center[2] = (_ats+i)->z() - (_ats+j)->z();
 
           if( fabs( center[2] ) + fabs( center[1] ) > ToleranceSame ){
             axis->direction[0] =  0 ;
@@ -1166,17 +1219,17 @@ namespace OpenBabel {
       StatTotal++ ;
       /* Do a quick check of geometry validity */
 
-      a[0] = _mol->GetAtom(ia+1)->x() - CenterOfSomething[0];
-      a[1] = _mol->GetAtom(ia+1)->y() - CenterOfSomething[1];
-      a[2] = _mol->GetAtom(ia+1)->z() - CenterOfSomething[2];
+      a[0] = (_ats+ia)->x() - CenterOfSomething[0];
+      a[1] = (_ats+ia)->y() - CenterOfSomething[1];
+      a[2] = (_ats+ia)->z() - CenterOfSomething[2];
 
-      b[0] = _mol->GetAtom(ib+1)->x() - CenterOfSomething[0];
-      b[1] = _mol->GetAtom(ib+1)->y() - CenterOfSomething[1];
-      b[2] = _mol->GetAtom(ib+1)->z() - CenterOfSomething[2];
+      b[0] = (_ats+ib)->x() - CenterOfSomething[0];
+      b[1] = (_ats+ib)->y() - CenterOfSomething[1];
+      b[2] = (_ats+ib)->z() - CenterOfSomething[2];
 
-      c[0] = _mol->GetAtom(ic+1)->x() - CenterOfSomething[0];
-      c[1] = _mol->GetAtom(ic+1)->y() - CenterOfSomething[1];
-      c[2] = _mol->GetAtom(ic+1)->z() - CenterOfSomething[2];
+      c[0] = (_ats+ic)->x() - CenterOfSomething[0];
+      c[1] = (_ats+ic)->y() - CenterOfSomething[1];
+      c[2] = (_ats+ic)->z() - CenterOfSomething[2];
 
       if( ( axis = init_axis_parameters( a, b, c ) ) == NULL ){
         if( verbose > 0 ) printf( "    no coherrent axis is defined by the points\n" ) ;
@@ -1250,17 +1303,17 @@ namespace OpenBabel {
       if( verbose > 0 ) printf( "Trying an axis for the triplet (%d,%d,%d)\n", ia, ib, ic ) ;
       StatTotal++ ;
       /* First, reduce the problem to Cn case */
-      a[0] = _mol->GetAtom(ia+1)->x() - CenterOfSomething[0];
-      a[1] = _mol->GetAtom(ia+1)->y() - CenterOfSomething[1];
-      a[2] = _mol->GetAtom(ia+1)->z() - CenterOfSomething[2];
+      a[0] = (_ats+ia)->x() - CenterOfSomething[0];
+      a[1] = (_ats+ia)->y() - CenterOfSomething[1];
+      a[2] = (_ats+ia)->z() - CenterOfSomething[2];
 
-      b[0] = _mol->GetAtom(ib+1)->x() - CenterOfSomething[0];
-      b[1] = _mol->GetAtom(ib+1)->y() - CenterOfSomething[1];
-      b[2] = _mol->GetAtom(ib+1)->z() - CenterOfSomething[2];
+      b[0] = (_ats+ib)->x() - CenterOfSomething[0];
+      b[1] = (_ats+ib)->y() - CenterOfSomething[1];
+      b[2] = (_ats+ib)->z() - CenterOfSomething[2];
 
-      c[0] = _mol->GetAtom(ic+1)->x() - CenterOfSomething[0];
-      c[1] = _mol->GetAtom(ic+1)->y() - CenterOfSomething[1];
-      c[2] = _mol->GetAtom(ic+1)->z() - CenterOfSomething[2];
+      c[0] = (_ats+ic)->x() - CenterOfSomething[0];
+      c[1] = (_ats+ic)->y() - CenterOfSomething[1];
+      c[2] = (_ats+ic)->z() - CenterOfSomething[2];
 
       for( i = 0, r = 0 ; i < DIMENSION ; i++ ){
         centerpoint[i] = a[i] + c[i] + 2*b[i] ;
@@ -1306,22 +1359,24 @@ namespace OpenBabel {
 
       for( j = 0 ; j < DIMENSION ; j++ )
         coord_sum[j] = 0 ;
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
-        atom = _mol->GetAtom(i+1);
-        coord_sum[0] = atom->x() + atom->y() + atom->z();
+      for( i = 0 ; i < _nrat ; i++ ){
+        atom = (_ats+i);
+        coord_sum[0] += atom->x();
+        coord_sum[1] += atom->y();
+        coord_sum[2] += atom->z();
       }
       for( j = 0 ; j < DIMENSION ; j++ )
-        CenterOfSomething[j] = coord_sum[j]/_mol->NumAtoms() ;
+        CenterOfSomething[j] = coord_sum[j]/_nrat ;
       if( verbose > 0 )
         printf( "Center of something is at %15.10f, %15.10f, %15.10f\n",
                 CenterOfSomething[0], CenterOfSomething[1], CenterOfSomething[2] ) ;
-      DistanceFromCenter = (double *) calloc( _mol->NumAtoms(), sizeof( double ) ) ;
+      DistanceFromCenter = (double *) calloc( _nrat, sizeof( double ) ) ;
       if( DistanceFromCenter == NULL ){
         //        fprintf( stderr, "Unable to allocate array for the distances\n" ) ;
         return;
       }
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
-        atom = _mol->GetAtom(i+1);
+      for( i = 0 ; i < _nrat ; i++ ){
+        atom = (_ats+i);
         r = SQUARE(atom->x() - CenterOfSomething[0])
           + SQUARE(atom->y() - CenterOfSomething[1])
           + SQUARE(atom->z() - CenterOfSomething[2]);
@@ -1347,9 +1402,9 @@ namespace OpenBabel {
         }
         Planes[ PlanesCount - 1 ] = plane ;
       }
-      for( i = 1 ; i < _mol->NumAtoms() ; i++ ){
+      for( i = 1 ; i < _nrat ; i++ ){
         for( j = 0 ; j < i ; j++ ){
-          if( !equivalentAtoms(*_mol->GetAtom(i+1), *_mol->GetAtom(j+1)) )
+          if( !equivalentAtoms(*(_ats+i), *(_ats+j)) )
             continue ;
           if( ( plane = init_mirror_plane( i, j ) ) != NULL ){
             PlanesCount++ ;
@@ -1397,7 +1452,7 @@ namespace OpenBabel {
     {
       unsigned int       i, j, k, l;
       double             center[ DIMENSION ] ;
-      double *           distances = (double*)calloc( _mol->NumAtoms(), sizeof( double ) ) ;
+      double *           distances = (double*)calloc( _nrat, sizeof( double ) ) ;
       double             r ;
       SYMMETRY_ELEMENT * axis ;
       OBAtom           *a1, *a2, *a3, *a4;
@@ -1406,17 +1461,17 @@ namespace OpenBabel {
         //        fprintf( stderr, "Out of memory in find_c2_axes()\n" ) ;
         return;
       }
-      for( i = 1 ; i < _mol->NumAtoms() ; i++ ){
+      for( i = 1 ; i < _nrat ; i++ ){
         for( j = 0 ; j < i ; j++ ){
-          if( !equivalentAtoms(*_mol->GetAtom(i+1), *_mol->GetAtom(j+1)) )
+          if( !equivalentAtoms(*(_ats+i), *(_ats+j)) )
             continue ;
           if( fabs( DistanceFromCenter[i] - DistanceFromCenter[j] ) > TolerancePrimary )
             continue ; /* A very cheap, but quite effective check */
           /*
            *   First, let's try to get it cheap and use CenterOfSomething
            */
-          a1 = _mol->GetAtom(i+1);
-          a2 = _mol->GetAtom(j+1);
+          a1 = (_ats+i);
+          a2 = (_ats+j);
           center[0] = (a1->x() + a2->x()) / 2.0;
           center[1] = (a1->y() + a2->z()) / 2.0;
           center[2] = (a1->z() + a2->y()) / 2.0;
@@ -1441,8 +1496,8 @@ namespace OpenBabel {
            *  Now, C2 axis can either pass through an atom, or through the
            *  middle of the other pair.
            */
-          for( k = 0 ; k < _mol->NumAtoms() ; k++ ){
-            if( ( axis = init_c2_axis( i, j, _mol->GetAtom(k+1)->GetVector().AsArray() ) ) != NULL ){
+          for( k = 0 ; k < _nrat ; k++ ){
+            if( ( axis = init_c2_axis( i, j, (_ats+k)->GetVector().AsArray() ) ) != NULL ){
               NormalAxesCount++ ;
               NormalAxes = (SYMMETRY_ELEMENT **) realloc( NormalAxes, sizeof( SYMMETRY_ELEMENT* ) * NormalAxesCount ) ;
               if( NormalAxes == NULL ){
@@ -1456,16 +1511,16 @@ namespace OpenBabel {
           /*
            *  Prepare data for an additional pre-screening check
            */
-          for( k = 0 ; k < _mol->NumAtoms() ; k++ ){
-            r = SQUARE(_mol->GetAtom(k+1)->x() - center[0])
-              + SQUARE(_mol->GetAtom(k+1)->y() - center[1])
-              + SQUARE(_mol->GetAtom(k+1)->z() - center[2]);
+          for( k = 0 ; k < _nrat ; k++ ){
+            r = SQUARE((_ats+k)->x() - center[0])
+              + SQUARE((_ats+k)->y() - center[1])
+              + SQUARE((_ats+k)->z() - center[2]);
             distances[k] = sqrt(r) ;
           }
-          for( k = 0 ; k < _mol->NumAtoms() ; k++ ){
-            a3 = _mol->GetAtom(k+1);
-            for( l = 0 ; l < _mol->NumAtoms() ; l++ ){
-              a4 = _mol->GetAtom(l+1);
+          for( k = 0 ; k < _nrat ; k++ ){
+            a3 = (_ats+k);
+            for( l = 0 ; l < _nrat ; l++ ){
+              a4 = (_ats+l);
               if( !equivalentAtoms(*a3, *a4) )
                 continue ;
               if( fabs( DistanceFromCenter[k] - DistanceFromCenter[l] ) > TolerancePrimary ||
@@ -1499,14 +1554,14 @@ namespace OpenBabel {
       unsigned int i, j, k;
       SYMMETRY_ELEMENT * axis ;
 
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
-        for( j = i + 1 ; j < _mol->NumAtoms() ; j++ ){
-          if( !equivalentAtoms(*_mol->GetAtom(i+1), *_mol->GetAtom(j+1)) )
+      for( i = 0 ; i < _nrat ; i++ ){
+        for( j = i + 1 ; j < _nrat ; j++ ){
+          if( !equivalentAtoms(*(_ats+i), *(_ats+j)) )
             continue ;
           if( fabs( DistanceFromCenter[i] - DistanceFromCenter[j] ) > TolerancePrimary )
             continue ; /* A very cheap, but quite effective check */
-          for( k = 0 ; k < _mol->NumAtoms() ; k++ ){
-            if( !equivalentAtoms(*_mol->GetAtom(i+1), *_mol->GetAtom(k+1)) )
+          for( k = 0 ; k < _nrat ; k++ ){
+            if( !equivalentAtoms(*(_ats+i), *(_ats+k)) )
               continue ;
             if( ( fabs( DistanceFromCenter[i] - DistanceFromCenter[k] ) > TolerancePrimary ) ||
                 ( fabs( DistanceFromCenter[j] - DistanceFromCenter[k] ) > TolerancePrimary ) )
@@ -1531,9 +1586,9 @@ namespace OpenBabel {
       unsigned int i, j, k;
       SYMMETRY_ELEMENT * axis ;
 
-      for( i = 0 ; i < _mol->NumAtoms() ; i++ ){
-        for( j = i + 1 ; j < _mol->NumAtoms() ; j++ ){
-          for( k = 0 ; k < _mol->NumAtoms() ; k++ ){
+      for( i = 0 ; i < _nrat ; i++ ){
+        for( j = i + 1 ; j < _nrat ; j++ ){
+          for( k = 0 ; k < _nrat ; k++ ){
             if( ( axis = init_improper_axis( i, j, k ) ) != NULL ){
               ImproperAxesCount++ ;
               ImproperAxes = (SYMMETRY_ELEMENT **) realloc( ImproperAxes, sizeof( SYMMETRY_ELEMENT* ) * ImproperAxesCount ) ;
@@ -1824,8 +1879,8 @@ namespace OpenBabel {
       OBAtom *a, *b, symmetric;
       for (unsigned int idx = 0; idx < PairedAtoms.size(); ++idx) {
           std::pair<int, int> atomPair = PairedAtoms[idx];
-          a = _mol->GetAtom(atomPair.first + 1); // ATOM INDEX ISSUE
-          b = _mol->GetAtom(atomPair.second + 1);
+          a = (_ats+atomPair.first); // ATOM INDEX ISSUE
+          b = (_ats+atomPair.second);
           elem->transform_atom( elem, a, &symmetric ) ;   // ATOM INDEX ISSUE
 
           // OK, so symmetric is where b *should* be
@@ -1848,10 +1903,43 @@ namespace OpenBabel {
     delete d;
   }
 
-  void OBPointGroup::Setup(OBMol *mol)
+  //explicitly declaring a conformer makes it thread-safe to use
+  //this on multiple conformers of the same molecule at the same time
+  void OBPointGroup::Setup(OBMol *mol, int conf)
   {
-    d->_mol = mol;
-    d->_mol->Center();
+
+    if (d->Setup)
+        d->Clear();
+
+    d->_nrat  = mol->NumAtoms();
+    d->_ats   = (OBAtom*)calloc(d->_nrat, sizeof(OBAtom));
+ 
+    double* coords = NULL;
+    vector3 negcenter = vector3(0.0,0.0,0.0);
+    if (conf < 0){
+        mol->Center(true);
+    }else{
+        coords = mol->GetConformer(conf);
+        double* coordstmp = coords;
+        for (int i=0; i<d->_nrat; ++i, coordstmp+=3){
+            negcenter -= vector3(*(coordstmp+0), *(coordstmp+1), *(coordstmp+2));
+        }
+        negcenter /= d->_nrat;
+    }
+
+    OBAtom* _atstmp = d->_ats;
+    for (unsigned int i=0; i<d->_nrat; ++i, ++_atstmp){
+        OBAtom* a = mol->GetAtom(i+1);
+        *_atstmp = *a; //copy all information over
+        vector3 tmpvec = negcenter;
+        if (conf>=0){
+            //coorect coordinates if required
+            tmpvec += vector3(*(coords+3*i+0), *(coords+3*i+1), *(coords+3*i+2));
+        }else{
+            tmpvec += _atstmp->GetVector();
+        }
+        _atstmp->SetVector(tmpvec);
+    }
     d->Setup = true;
   }
 
@@ -2192,7 +2280,9 @@ namespace OpenBabel {
 
     // Copy back to the molecule
     OBAtom *atom;
-    FOR_ATOMS_OF_MOL(a, d->_mol)
+    OBAtom* a = d->_ats;
+    for (int i=0; i<d->_nrat; ++i, ++a)
+    //FOR_ATOMS_OF_MOL(a, d->_mol)
       {
         atom = mol->GetAtom(a->GetIdx());
         atom->SetVector(a->GetVector());

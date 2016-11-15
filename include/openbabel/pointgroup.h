@@ -64,7 +64,7 @@ namespace OpenBabel
       };
 
       //! Set the point group detection for this molecule
-      void Setup(OBMol *);
+      void Setup(OBMol *, int conf = -1);
 
       /** \return the 3D point group symbol for this molecule. A tolerance of
         *  0.01 is used.
