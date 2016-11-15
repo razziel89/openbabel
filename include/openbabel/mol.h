@@ -234,7 +234,7 @@ enum HydrogenType { AllHydrogen, PolarHydrogen, NonPolarHydrogen };
     void Align(const double p[3], const double v1[3], const double v2[3]);
     void Align(const vector3 p, const vector3 v1, const vector3 v2);
     //! Align only the atoms in the given vector with their main axes
-    void Align(std::vector<OBAtom*> &atom_vec, const vector3 p, const vector3 v1, const vector3 v2);
+    void Align(std::vector<OBAtom*> &atom_vec, const vector3 p, const vector3 v1, const vector3 v2, const OBBitVec mask=OBBitVec());
     //! Set the dihedral angle defined by the four atom indices to angle
     //! A cis-configurations corresponds to angle=0 whereas a trans configuration corresponds to angle=180
     bool SetDihedralAngle(const int idxa1, const int idxa2, const int idxa3, const int idxa4, const double angle);
@@ -506,8 +506,8 @@ enum HydrogenType { AllHydrogen, PolarHydrogen, NonPolarHydrogen };
     void Rotate(const double m[9]);
     //! Rotate a specific conformer @p nconf using the supplied rotation matrix @p m
     void Rotate(const double m[9],int nconf);
-    //! Translate to the center of all coordinates (for this conformer)
-    void Center();
+    //! Translate to the center of all coordinates (for all conformers if current==false)
+    void Center(bool current=false);
     //! Transform to standard Kekule bond structure (presumably from an aromatic form)
 
     bool Kekulize();
@@ -583,8 +583,10 @@ enum HydrogenType { AllHydrogen, PolarHydrogen, NonPolarHydrogen };
     //! The OBMol is a pattern, not a complete molecule. Left unchanged by Clear().
     void   SetIsPatternStructure()       { SetFlag(OB_PATTERN_STRUCTURE);}
 
-    //! \return the center of the supplied conformer @p nconf
-    //! \see Center() to actually center all conformers at the origin
+    //! \return the center of the supplied conformer @p nconf and center the conformer to the origin
+    //! WARNING: the given conformers center will be at the origin afterwards.
+    //! The previous documentation stated otherwise. If @a nconf<0, the current
+    //! conformer will be centered.
     vector3 Center(int nconf);
     /*! Set the torsion defined by these atoms, rotating bonded neighbors
      *  \par ang The torsion angle in radians
