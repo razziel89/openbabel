@@ -228,6 +228,10 @@ enum HydrogenType { AllHydrogen, PolarHydrogen, NonPolarHydrogen };
     void Translate(const double vector[3]);
     //! Translate only the atoms in the given vector
     void Translate(std::vector<OBAtom*> &atom_vec, const double vector[3]);
+
+    void GetMainAxes(vector3* p, vector3* v1, vector3* v2, const OBBitVec mask=OBBitVec());
+    void GetMainAxes(std::vector<OBAtom*> &atom_vec, vector3* p, vector3* v1, vector3* v2, const OBBitVec mask=OBBitVec());
+
     //! Align a molecule with a plane as good as possible
     //! The plane is given by the poitn p which will be the molecule's new centre
     //! and two axes v1 and v2 which are the third main axis and the second main axis respectively

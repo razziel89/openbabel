@@ -2146,6 +2146,7 @@ namespace OpenBabel
     }
   }
 
+
   //! \brief Align a center of a molecule as well as its third and second main axes.
   //!
   //! The molecule's center is first aligned to a point and it's then rotated so that
@@ -2175,7 +2176,109 @@ namespace OpenBabel
   void OBMol::Align(vector<OBAtom*> &atom_vec, const vector3 p, const vector3 v1, const vector3 v2, const OBBitVec mask)
   {
     matrix3x3 matrix, tempmatrix; 
-    vector3 eigenvals, tempvec, main1, main2;
+    vector3 /*eigenvals,*/ tempvec, main1, main2;
+    vector3 center; //= vector3(0,0,0);
+    //double d[3][3];
+    double /*x,y,z,*/angle;
+    OBAtom *atom;
+    vector<OBAtom*>::iterator i;
+
+    vector<OBAtom*> align_vec;
+
+    if (mask.Empty()){
+      align_vec = atom_vec;
+    }else{
+      align_vec.reserve(mask.CountBits());
+      for (int i=mask.FirstBit(); i!=mask.EndBit(); i=mask.NextBit(i)){
+        if (i>=1 && i<=atom_vec.size()){
+          align_vec.push_back(atom_vec[i-1]);
+        }else{
+          std::cerr << "ERROR: aligning mask index " << i << " out of bounds (1 to " << atom_vec.size() << ")" << std::endl;
+          return;
+        }
+      }
+    }
+
+    //int elements = 0;
+    //for (i = align_vec.begin(); *i != NULL && i != align_vec.end(); ++i)
+    //{
+    //  center += (*i)->GetVector();
+    //  ++elements;
+    //}
+    //center /= elements;
+    //d[0][0]=0;d[0][1]=0;d[1][1]=0;
+    //d[0][2]=0;d[1][2]=0;d[2][2]=0;
+    //d[1][0]=0;d[2][0]=0;d[2][1]=0;
+
+    GetMainAxes(atom_vec, &center, &main1, &main2, mask);
+
+    //for (i = align_vec.begin(); *i != NULL && i != align_vec.end(); ++i)
+    //{
+    //  atom = *i;
+    //  tempvec=atom->GetVector()-center;
+    //  x=tempvec.GetX();
+    //  y=tempvec.GetY();
+    //  z=tempvec.GetZ();
+    //  d[0][0]+=y*y+z*z;
+    //  d[0][1]-=x*y;
+    //  d[1][1]+=x*x+z*z;
+    //  d[0][2]-=x*z;
+    //  d[1][2]-=y*z;
+    //  d[2][2]+=x*x+y*y;
+    //}
+    //d[1][0]=d[0][1];
+    //d[2][0]=d[0][2];
+    //d[2][1]=d[1][2];
+    //
+    //matrix=matrix3x3(d);
+
+    //tempmatrix = matrix.findEigenvectorsIfSymmetric(eigenvals);
+
+    //main1 = tempmatrix.GetColumn(0);
+    tempvec = cross(v1,main1);
+    if ( tempvec.CanBeNormalized() ) {
+      angle = vectorAngle(v1,main1);
+      matrix.RotAboutAxisByAngle(tempvec,angle);
+    }
+    else{
+      matrix.RotAboutAxisByAngle(main1,0.0);
+    }
+
+    //main2 = tempmatrix.GetColumn(1);
+    main2 *= matrix;
+    tempvec = cross(v2,main2);
+    if ( tempvec.CanBeNormalized() ) {
+      angle = vectorAngle(v2,main2);
+      tempmatrix.RotAboutAxisByAngle(tempvec,angle);
+    }
+    else{
+      tempmatrix.RotAboutAxisByAngle(main2,0.0);
+    }
+
+    matrix=tempmatrix*matrix;
+    
+    for (i = atom_vec.begin(); *i != NULL && i != atom_vec.end(); ++i)
+    {
+      atom = *i;
+      tempvec = atom->GetVector();
+      tempvec -= center;
+      tempvec *= matrix;
+      tempvec += p;
+      atom->SetVector(tempvec);
+    }
+    
+  }
+
+  void OBMol::GetMainAxes(vector3* p, vector3* v1, vector3* v2, const OBBitVec mask)
+  {
+
+    GetMainAxes(_vatom, p, v1, v2, mask);
+  }
+
+  void OBMol::GetMainAxes(vector<OBAtom*> &atom_vec, vector3* p, vector3* v1, vector3* v2, const OBBitVec mask)
+  {
+    matrix3x3 matrix, tempmatrix; 
+    vector3 eigenvals, tempvec;
     vector3 center = vector3(0,0,0);
     double d[3][3];
     double x,y,z,angle;
@@ -2205,11 +2308,13 @@ namespace OpenBabel
       ++elements;
     }
     center /= elements;
+    *p = center;
+
     d[0][0]=0;d[0][1]=0;d[1][1]=0;
     d[0][2]=0;d[1][2]=0;d[2][2]=0;
     d[1][0]=0;d[2][0]=0;d[2][1]=0;
 
-    for (i = atom_vec.begin(); *i != NULL && i != atom_vec.end(); ++i)
+    for (i = align_vec.begin(); *i != NULL && i != align_vec.end(); ++i)
     {
       atom = *i;
       tempvec=atom->GetVector()-center;
@@ -2231,40 +2336,11 @@ namespace OpenBabel
 
     tempmatrix = matrix.findEigenvectorsIfSymmetric(eigenvals);
 
-    main1 = tempmatrix.GetColumn(0);
-    tempvec = cross(v1,main1);
-    if ( tempvec.CanBeNormalized() ) {
-      angle = vectorAngle(v1,main1);
-      matrix.RotAboutAxisByAngle(tempvec,angle);
-    }
-    else{
-      matrix.RotAboutAxisByAngle(main1,0.0);
-    }
+    *v1 = tempmatrix.GetColumn(0);
+    *v2 = tempmatrix.GetColumn(1);
 
-    main2 = tempmatrix.GetColumn(1);
-    main2 *= matrix;
-    tempvec = cross(v2,main2);
-    if ( tempvec.CanBeNormalized() ) {
-      angle = vectorAngle(v2,main2);
-      tempmatrix.RotAboutAxisByAngle(tempvec,angle);
-    }
-    else{
-      tempmatrix.RotAboutAxisByAngle(main2,0.0);
-    }
-
-    matrix=tempmatrix*matrix;
-    
-    for (i = atom_vec.begin(); *i != NULL && i != atom_vec.end(); ++i)
-    {
-      atom = *i;
-      tempvec = atom->GetVector();
-      tempvec -= center;
-      tempvec *= matrix;
-      tempvec += p;
-      atom->SetVector(tempvec);
-    }
-    
   }
+
 
   //! \brief Set a dihedral angle.
   //!
