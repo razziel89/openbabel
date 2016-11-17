@@ -5013,7 +5013,7 @@ namespace OpenBabel
 
   void OBMol::DeleteConformers(int start_idx, int end_idx)
   {
-    if (start_idx < 0 || start_idx >= (signed)_vconf.size() || end_idx < 0 || end_idx >= (signed)_vconf.size() || start_idx >= end_idx)
+    if (start_idx < 0 || start_idx >= (signed)_vconf.size() || end_idx < 0 || end_idx >= (signed)_vconf.size() || start_idx > end_idx)
       return;
     for (std::vector<double*>::iterator it = _vconf.begin()+start_idx; it!=_vconf.begin()+end_idx+1; ++it){
         delete [] *it;
