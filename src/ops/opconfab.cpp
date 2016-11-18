@@ -387,7 +387,7 @@ namespace OpenBabel
       }
     }
 
-    bool success = pff->Setup(*pmol);
+    bool success = pff->Setup(*pmol,true); //force reinitializing the ff's internal OBMol
     if (!success) {
       cout << "!!Cannot set up forcefield for this molecule" << endl;
       return false;
