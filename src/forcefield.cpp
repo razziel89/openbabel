@@ -802,7 +802,7 @@ namespace OpenBabel
   //
   //////////////////////////////////////////////////////////////////////////////////
 
-  bool OBForceField::Setup(OBMol &mol)
+  bool OBForceField::Setup(OBMol &mol, bool force)
   {
     if (!_init) {
       ParseParamFile();
@@ -812,7 +812,7 @@ namespace OpenBabel
       _grad1 = NULL;
     }
 
-    if (IsSetupNeeded(mol)) {
+    if (force || IsSetupNeeded(mol)) {
       _mol = mol;
       _ncoords = _mol.NumAtoms() * 3;
 
@@ -935,10 +935,22 @@ namespace OpenBabel
   // avogadro's AutoOpt tool
   bool OBForceField::IsSetupNeeded(OBMol &mol)
   {
+    // IMHO, this function is likely to cause problems in cases where new
+    // members/data are added to OBMol that might differ from molecule to
+    // molecule, which are not checked here, because the current molecule and
+    // the new one would be considered equivalent although they're not. Hence,
+    // I added an optional parameter to OBForceField::Setup that allows for
+    // skipping this check.
     if (_mol.NumAtoms() != mol.NumAtoms())
       return true;
 
     if (_mol.NumBonds() != mol.NumBonds())
+      return true;
+
+    if (_mol.NumResidues() != mol.NumResidues())
+      return true;
+
+    if (_mol.NumConformers() != mol.NumConformers())
       return true;
 
     FOR_ATOMS_OF_MOL (atom, _mol) {
