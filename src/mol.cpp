@@ -34,6 +34,10 @@ GNU General Public License for more details.
 #include <sstream>
 #include <set>
 
+#include <functional> //for std::hash
+#include <utility> //for std::pair
+#include <iomanip> // For setprecision
+
 #define PI 3.1415926535897932384626433832795
 
 using namespace std;
@@ -1210,7 +1214,8 @@ namespace OpenBabel
       }
   }
 
-  OBMol &OBMol::operator=(const OBMol &source)
+  //OBMol &OBMol::operator=(const OBMol &source)
+  void OBMol::Assign(const OBMol &source, bool confs)
   //atom and bond info is copied from src to dest
   //Conformers are now copied also, MM 2/7/01
   //Residue information are copied, MM 4-27-01
@@ -1220,7 +1225,7 @@ namespace OpenBabel
   //OB_TSPIN_MOL and OB_PATTERN_STRUCTURE which are copied
   {
     if (this == &source)
-      return *this;
+      return;// *this;
 
     OBMol &src = (OBMol &)source;
     vector<OBAtom*>::iterator i;
@@ -1290,8 +1295,8 @@ namespace OpenBabel
           }
       }
 
-    //Copy conformer information
-    if (src.NumConformers() > 1) {
+    //Copy conformer information if requested (default)
+    if (src.NumConformers() > 1 && confs) {
       int k;//,l;
       vector<double*> conf;
       int currConf = -1;
@@ -1334,7 +1339,8 @@ namespace OpenBabel
     if (src.HasChiralityPerceived())
       SetChiralityPerceived();
 
-    return(*this);
+    //return(*this);
+    return;
   }
 
   OBMol &OBMol::operator+=(const OBMol &source)

@@ -309,7 +309,6 @@ namespace OpenBabel
 
     if(pConv && pConv->IsFirstInput())
     {
-      pConv->AddOption("writeconformers", OBConversion::GENOPTIONS);
       rmsd_cutoff = -1.0;
       energy_cutoff = -1.0;
       ffname = "mmff94";
@@ -373,9 +372,7 @@ namespace OpenBabel
 
   bool OpSimScreen::Run(OBConversion* pConv, OBMol* pmol)
   {
-    //OBMol mol = *pmol;
     
-    pmol->AddHydrogens();
     cout << endl << "..conformers before screening: " << pmol->NumConformers() << endl;
 
     if (ssalign == before || ssalign == always){
@@ -383,15 +380,16 @@ namespace OpenBabel
         cout << "..aligning conformers prior to screening" << endl;
       for (int i=pmol->NumConformers()-1; i>=0; --i){
           pmol->SetConformer(i);
-          pmol->Align({0,0,0},{1,0,0},{0,1,0});
+          pmol->Align({0.0,0.0,0.0},{1.0,0.0,0.0},{0.0,1.0,0.0});
       }
     }
-
-    bool success = pff->Setup(*pmol,true); //force reinitializing the ff's internal OBMol
+    //force reinitializing the ff's internal OBMol and take over this molecule's conformers
+    bool success = pff->Setup(*pmol,false,true);
     if (!success) {
       cout << "!!Cannot set up forcefield for this molecule" << endl;
       return false;
     }
+    //pmol->DeleteConformers(0,pmol->NumConformers()-1);
 
     success = (pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, prec, verbose) == 0);
     if (!success) {
@@ -412,14 +410,19 @@ namespace OpenBabel
         cout << "..aligning conformers after screening" << endl;
       for (int i=pmol->NumConformers()-1; i>=0; --i){
           pmol->SetConformer(i);
-          pmol->Align({0,0,0},{1,0,0},{0,1,0});
+          pmol->Align({0.0,0.0,0.0},{1.0,0.0,0.0},{0.0,1.0,0.0});
       }
     }
 
-    for (unsigned int c = 0; c < pmol->NumConformers(); ++c) {
-      pmol->SetConformer(c);
-      if(!pConv->GetOutFormat()->WriteMolecule(pmol, pConv))
-        break;
+    OBFormat* multixyz = pConv->FindFormat("multixyz");
+    if (multixyz!=NULL && multixyz==pConv->GetOutFormat()){
+        pConv->GetOutFormat()->WriteMolecule(pmol, pConv);
+    }else{
+        for (unsigned int c = 0; c < pmol->NumConformers(); ++c) {
+          pmol->SetConformer(c);
+          if(!pConv->GetOutFormat()->WriteMolecule(pmol, pConv))
+            break;
+        }
     }
     if (pmol->NumConformers()>0) {
         pmol->SetConformer(0);

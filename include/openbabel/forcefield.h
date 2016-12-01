@@ -639,10 +639,11 @@ namespace OpenBabel
     virtual bool HasAnalyticalGradients() { return false; }
     /*! Setup the forcefield for mol (assigns atom types, charges, etc.). Keep current constraints.
      *  \param mol The OBMol object that contains the atoms and bonds.
+     *  \param take actually take over the given molecule's conformers (do not copy them)
      *  \param force Skip checking whether \a mol is equivalent to the internal molecule and reinitialize anyway
      *  \return True if succesfull.
      */
-    bool Setup(OBMol &mol, bool force = false);
+    bool Setup(OBMol &mol, bool take = false, bool force = false);
     /*! Setup the forcefield for mol (assigns atom types, charges, etc.). Use new constraints.
      *  \param mol The OBMol object that contains the atoms and bonds.
      *  \param constraints The OBFFConstraints object that contains the constraints.
