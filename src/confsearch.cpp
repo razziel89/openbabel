@@ -113,6 +113,7 @@ namespace OpenBabel
       inline double GetCutoff() {
         return cutoff;
       }
+      bool KeepHydrogens(OBBitVec mask);
 
     private:
       bool _percise;
@@ -123,10 +124,17 @@ namespace OpenBabel
       OBAlign* palign;
       const double cutoff;
       int n_rmsd;
-      // TODO: allow setting some hydrogen bits to OFF
-      // in order to keep important ones (e.g. for porphyrins)
       OBBitVec hydrogens;
     };
+
+  bool OBDiversePoses::KeepHydrogens(OBBitVec mask){
+      OBBitVec tmp = hydrogens;
+      tmp.Negate();
+      if (!(tmp & mask).IsEmpty())
+          return false;
+      hydrogens ^= mask;
+      return true;
+  }
 
   OBDiversePoses::OBDiversePoses(const OBMol &ref, double RMSD, bool percise):
           palign(new OBAlign(false, percise)), cutoff(RMSD), _percise(percise)
@@ -543,7 +551,7 @@ typedef std::pair<Hash,Hash> HashPair;
 
 // Return two hashes of string representations of this molecule (one: truncating, two: rounding).
 // The parameter "prec" declares to how many decimal places the conversion shall be performed.
-HashPair GetSortedConformerHash(OBMol& mol, int conf_nr, int prec, std::vector<unsigned short>& atom_order){
+HashPair GetSortedConformerHash(OBMol& mol, int conf_nr, int prec, std::vector<unsigned short>& atom_order, OBBitVec mask){
     int fac = 1;
     for (int i=prec; i>=1; --i)
         fac *= 10;
@@ -554,10 +562,9 @@ HashPair GetSortedConformerHash(OBMol& mol, int conf_nr, int prec, std::vector<u
     symsort.reserve(nr_atoms);
     double* coords = mol.GetConformer(conf_nr);
     OBAtomIterator it=mol.BeginAtoms();
-    for (; it!=mol.EndAtoms(); ++it, coords+=3){
-        // Ignore hydrogens atoms
-        // TODO: allow keeping important hydrogens
-        if (not((*it)->IsHydrogen())){
+    for (int count=0; it!=mol.EndAtoms(); ++it, coords+=3, ++count){
+        //if (not((*it)->IsHydrogen())){
+        if (mask.BitIsSet(count)){
             iatom at = iatom((*it)->GetAtomicNum(), *(coords+0), *(coords+1), *(coords+2), fac);
             symsort.push_back(std::make_pair(at, (*it)->GetIdx()-1));
         }
@@ -598,7 +605,6 @@ double DirectRMSDComparison(OBMol& mol, const HashInfo& cur, const HashInfo& ref
     // No more checks for the end of the iteration have to be performed since
     // all conformers must have the same number of non-hydrogen atoms.
     // This process DOES ignore hydrogen atoms.
-    // TODO: allow keeping of important hydrogens
     std::vector<unsigned short>::const_iterator cur_it, ref_it, ref_it_end;
     cur_it     = cur.second.begin();
     ref_it     = ref.second.begin();
@@ -629,7 +635,7 @@ double DirectRMSDComparison(OBMol& mol, const HashInfo& cur, const HashInfo& ref
   }
 
 // The main similarity screening function
-int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbose)
+int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, OBBitVec hydrogen_mask, bool verbose)
   {
     
     if (_mol.NumConformers()<=0){
@@ -701,19 +707,28 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
     // (also called symmetry screening) is performed beforehand to keep the
     // required RAM to a minimum.
     std::vector<unsigned short> sort_important;
-    if (symscreening){
+    OBBitVec sort_important_mask = OBBitVec();
+    sort_important_mask.Resize(_mol.NumAtoms());
+    sort_important_mask.SetRangeOff(0,_mol.NumAtoms()-1);
+    {
         unsigned short count = 0;
         sort_important.reserve(_mol.NumAtoms());
         for (OBAtomIterator it=_mol.BeginAtoms(); it!=_mol.EndAtoms(); ++it, ++count){
-            // TODO: allow keeping important hydrogens
-            if (not((*it)->IsHydrogen())){
+            if (not((*it)->IsHydrogen()) || hydrogen_mask.BitIsSet(count)){
                 sort_important.push_back(count);
+                sort_important_mask.SetBitOn(count);
             }
         }
     }
 
     // This tree will be used to screen by RMSD
     OBDiversePoses divposes(_mol, rmsd, false);
+
+    bool success = divposes.KeepHydrogens(hydrogen_mask);
+    if (!success){
+        std::cerr << "ERROR: given hydrogen_mask also masks non-hydrogen atoms." << std::endl;
+        return 1;
+    }
 
     if (verbose){
         if (escreening){
@@ -779,7 +794,7 @@ int OBForceField::ScreenByRMSD(double rmsd, double egap, short prec, bool verbos
         if (!screened && symscreening){
             // contains the strictly weak ordering
             std::vector<unsigned short> atom_order;
-            HashPair geom_hash = GetSortedConformerHash(_mol, conf_count, prec, atom_order);
+            HashPair geom_hash = GetSortedConformerHash(_mol, conf_count, prec, atom_order, sort_important_mask);
 
             HashInfo order_element = std::make_pair(conf_count,atom_order);
 

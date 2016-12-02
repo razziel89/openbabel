@@ -1187,7 +1187,7 @@ namespace OpenBabel
     //! the forcefield. If prec>=0, screening by symmetry will also be performed and prec is the number
     //! of decimal places that is used to determine whether conformers are symmetry equivalent. Note that
     //! this relies on the conformers being aligned in some uniform way.
-    int ScreenByRMSD(double rmsd, double egap, short prec, bool verbose = false);
+    int ScreenByRMSD(double rmsd, double egap, short prec, OBBitVec hydrogen_mask, bool verbose = false);
 #endif
 
     /////////////////////////////////////////////////////////////////////////
