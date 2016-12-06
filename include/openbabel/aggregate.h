@@ -38,11 +38,11 @@ namespace OpenBabel
   {
   protected:
     int                                  _nrMolecules; //!< number of molecules in this aggregate
-    std::vector<std::vector<OBAtom*>* >  _connections; //!< vector of molecules (eacn a vector of atoms)
+    std::vector<std::vector<OBAtom*> >   _connections; //!< vector of molecules (each a vector of atoms)
     bool                                 _needRefresh; //!< whether or not _connections must be refreshed
     //! Tags can be used to manipulate multiple molecules in an
     //! aggregate at the same time after adding them to one tag
-    std::vector<std::vector<OBAtom*>* >  _tags;    //!< all tags in this aggregate
+    std::vector<std::vector<OBAtom*> >   _tags;    //!< all tags in this aggregate
     std::vector<std::vector<int> >       _molTags; //!< which molecule belongs to which tag
     bool                                 _useTag;  //!< whether or not to use tags to determine which molecules to move
     //all the other private members are inherited from OBMol
@@ -62,6 +62,9 @@ namespace OpenBabel
     //! Assignment, copies atoms and bonds but no OBGenericData
     //! If given an OBAggregate, inplicit casting is used
     OBAggregate &operator=(const OBMol &mol);
+    OBAggregate &operator=(const OBAggregate &agg);
+    void Assign(const OBMol &mol){ *this = mol; }
+    void Assign(const OBAggregate &agg){ *this = agg; }
 
 	//! Append one molecule to this aggregate
 	void AppendMolecule(const OBMol &source);

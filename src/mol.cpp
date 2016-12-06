@@ -2397,7 +2397,7 @@ namespace OpenBabel
   //! Rotate around the bond between atoms 2 and 3 by angle.
   //! The direction is defined by atoms 1 and 4. A dihedral angle of 0 means a
   //! cis-configuration whereas 180 means a trans configuration.
-  double OBMol::GetDihedralAngle(const double idxa1, const double idxa2, const double idxa3, const double idxa4)
+  double OBMol::GetDihedralAngle(const int idxa1, const int idxa2, const int idxa3, const int idxa4)
   {
     vector3 v1, v2, v3, n1, n2;
     OBAtom *a1, *a2, *a3, *a4;
