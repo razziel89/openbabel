@@ -157,7 +157,9 @@ enum HydrogenType { AllHydrogen, PolarHydrogen, NonPolarHydrogen };
     //! Destructor
     virtual ~OBMol();
     //! Assignment, copies atoms,bonds and OBGenericData
-    OBMol &operator=(const OBMol &mol);
+    OBMol &operator=(const OBMol &mol){ this->Assign(mol); return *this; }
+    // To be able to use this operator from the bindings, create a dedicated method
+    void Assign(const OBMol &mol, bool take = false);
     //! Copies atoms and bonds but not OBGenericData
     OBMol &operator+=(const OBMol &mol);
 
