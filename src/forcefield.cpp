@@ -802,7 +802,7 @@ namespace OpenBabel
   //
   //////////////////////////////////////////////////////////////////////////////////
 
-  bool OBForceField::Setup(OBMol &mol, bool force)
+  bool OBForceField::Setup(OBMol &mol, bool force, bool take)
   {
     if (!_init) {
       ParseParamFile();
@@ -813,7 +813,7 @@ namespace OpenBabel
     }
 
     if (force || IsSetupNeeded(mol)) {
-      _mol = mol;
+      _mol.Assign(mol,take);
       _ncoords = _mol.NumAtoms() * 3;
 
       if (_velocityPtr)

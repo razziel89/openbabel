@@ -282,20 +282,19 @@ namespace OpenBabel
 
     //Define some references so we can use the old parameter names
     ostream &ofs = *pConv->GetOutStream();
-    OBMol &mol = *pmol;
 
     char buffer[BUFF_SIZE];
 
-    snprintf(buffer, BUFF_SIZE, "%d\n", mol.NumAtoms());
+    snprintf(buffer, BUFF_SIZE, "%d\n", pmol->NumAtoms());
     ofs << buffer;
-    if (fabs(mol.GetEnergy()) > 1.0e-3) // nonzero energy field
+    if (fabs(pmol->GetEnergy()) > 1.0e-3) // nonzero energy field
       snprintf(buffer, BUFF_SIZE, "%s\tEnergy: %15.7f\n",
-               mol.GetTitle(), mol.GetEnergy());
+               pmol->GetTitle(), pmol->GetEnergy());
     else
-      snprintf(buffer, BUFF_SIZE, "%s\n", mol.GetTitle());
+      snprintf(buffer, BUFF_SIZE, "%s\n", pmol->GetTitle());
     ofs << buffer;
 
-    FOR_ATOMS_OF_MOL(atom, mol)
+    FOR_ATOMS_OF_MOL(atom, *pmol)
       {
         snprintf(buffer, BUFF_SIZE, "%-3s%15.5f%15.5f%15.5f\n",
                  etab.GetSymbol(atom->GetAtomicNum()),
@@ -407,6 +406,11 @@ namespace OpenBabel
         // per conformer
         for (int conf_count = 0; conf_count < pmol->NumConformers(); ++conf_count){
             pmol->SetConformer(conf_count);
+            std::stringstream ss;
+            ss << "Conformer " << conf_count+1 << "/" << pmol->NumConformers();
+            std::string title = ss.str();
+            pmol->SetTitle(title);
+
             result = theXYZFormat.WriteMolecule(pmol, pConv);
             if (!result){
                 return false;

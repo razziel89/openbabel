@@ -26,11 +26,13 @@ GNU General Public License for more details.
 
 #include <openbabel/babelconfig.h>
 #include <iostream>
-#include<openbabel/op.h>
-#include<openbabel/mol.h>
-#include<openbabel/forcefield.h>
+#include <sstream>
+#include <openbabel/op.h>
+#include <openbabel/mol.h>
+#include <openbabel/forcefield.h>
 #include <openbabel/obconversion.h>
-#include<openbabel/generic.h>
+#include <openbabel/generic.h>
+#include <openbabel/bitvec.h>
 
 #define CONFAB_VER "1.1.0"
 
@@ -231,7 +233,7 @@ namespace OpenBabel
           "                 of conformer equivalence due to symmetry. A high value\n"
           "                 reduces computational time but increases risk of getting\n"
           "                 duplicates (default: do not use symmetry screening,\n"
-          "                 highly recommended: 2 or 1)\n"
+          "                 highly recommended: 2)\n"
           "    --ssalign #  Automatically align all conformers prior to or after the\n"
           "                 similarity screening procedure. The third and second main axes\n"
           "                 would be aligned to the x and y axes, respectively and the\n"
@@ -240,6 +242,11 @@ namespace OpenBabel
           "                 for 'before' and 'after' respectively. Note that the\n"
           "                 symmetry screening relies on the conformers being aligned\n"
           "                 in some uniform fashion.\n"
+          "    --imp-H #    Declare a comma-separated list of indices (counting starts\n"
+          "                 at 1) that indicate \"important\" hydrogens, i.e., such H-\n"
+          "                 atoms that should not be discarded when computing an RMSD or\n"
+          "                 when judging equivalence due to symmetry. This is useful in\n"
+          "                 cases where, e.g., different tautomers of a molecule exist.\n"
           ;
       }
 
@@ -258,6 +265,8 @@ namespace OpenBabel
       short int prec;
       string ffname;
       OBForceField *pff;
+      OBBitVec hydrogen_mask;
+      string str_hydrogen_mask;
   };
 
   //////////////////////////////////////////////////////////
@@ -299,6 +308,10 @@ namespace OpenBabel
             cout << "..Aligning molecules prior to and after screening" << endl;
             break;
     }
+    if (!str_hydrogen_mask.empty())
+        cout << "..Considering important hydrogens for screening: " << str_hydrogen_mask << endl;
+    else
+        cout << "..Ignoring all hydrogens for screening." << endl;
     cout << "..forcefield    = " << ffname << endl;
     cout << "..Verbose? " << (verbose ? "True" : "False") << endl;
   }
@@ -309,13 +322,16 @@ namespace OpenBabel
 
     if(pConv && pConv->IsFirstInput())
     {
-      pConv->AddOption("writeconformers", OBConversion::GENOPTIONS);
       rmsd_cutoff = -1.0;
       energy_cutoff = -1.0;
       ffname = "mmff94";
       prec = -1;
       verbose = false;
       ssalign = never;
+      str_hydrogen_mask = "";
+      hydrogen_mask = OBBitVec();
+      hydrogen_mask.Resize(pmol->NumAtoms());
+      hydrogen_mask.SetRangeOff(0,pmol->NumAtoms()-1);
 
       OpMap::const_iterator iter;
       iter = pmap->find("rcutoff");
@@ -358,6 +374,25 @@ namespace OpenBabel
       iter = pmap->find("verbose");
       if(iter!=pmap->end())
         verbose = true;
+      iter = pmap->find("imp-H");
+      if(iter!=pmap->end()){
+          str_hydrogen_mask = iter->second;
+          stringstream ss(str_hydrogen_mask);
+          int i;
+          while(ss >> i){
+              if (pmol->GetAtom(i)->GetAtomicNum() != 1){
+                cerr << "ERROR: atom with index " << i << " is no hydrogen." << endl;
+                return false;
+              }
+              hydrogen_mask.SetBitOn(i-1);
+              if (ss.peek() == ',' || ss.peek() == EOF)
+                  ss.ignore();
+              else{
+                cerr << "ERROR: argument to --imp-H must be comma-separated integers, but found " << ss.peek() << endl;
+                return false;
+              }
+          }
+      }
 
       cout << "**Starting SimScreen" << endl;
       pff = OpenBabel::OBForceField::FindType(ffname.c_str());
@@ -373,9 +408,7 @@ namespace OpenBabel
 
   bool OpSimScreen::Run(OBConversion* pConv, OBMol* pmol)
   {
-    //OBMol mol = *pmol;
     
-    pmol->AddHydrogens();
     cout << endl << "..conformers before screening: " << pmol->NumConformers() << endl;
 
     if (ssalign == before || ssalign == always){
@@ -383,17 +416,17 @@ namespace OpenBabel
         cout << "..aligning conformers prior to screening" << endl;
       for (int i=pmol->NumConformers()-1; i>=0; --i){
           pmol->SetConformer(i);
-          pmol->Align({0,0,0},{1,0,0},{0,1,0});
+          pmol->Align({0.0,0.0,0.0},{1.0,0.0,0.0},{0.0,1.0,0.0});
       }
     }
-
-    bool success = pff->Setup(*pmol,true); //force reinitializing the ff's internal OBMol
+    //force reinitializing the ff's internal OBMol and take over this molecule's conformers
+    bool success = pff->Setup(*pmol,true,true);
     if (!success) {
       cout << "!!Cannot set up forcefield for this molecule" << endl;
       return false;
     }
 
-    success = (pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, prec, verbose) == 0);
+    success = (pff->ScreenByRMSD(rmsd_cutoff, energy_cutoff, prec, hydrogen_mask, verbose) == 0);
     if (!success) {
       cout << "!!Error in screening procedure for this molecule" << endl;
       return false;
@@ -412,14 +445,19 @@ namespace OpenBabel
         cout << "..aligning conformers after screening" << endl;
       for (int i=pmol->NumConformers()-1; i>=0; --i){
           pmol->SetConformer(i);
-          pmol->Align({0,0,0},{1,0,0},{0,1,0});
+          pmol->Align({0.0,0.0,0.0},{1.0,0.0,0.0},{0.0,1.0,0.0});
       }
     }
 
-    for (unsigned int c = 0; c < pmol->NumConformers(); ++c) {
-      pmol->SetConformer(c);
-      if(!pConv->GetOutFormat()->WriteMolecule(pmol, pConv))
-        break;
+    OBFormat* multixyz = pConv->FindFormat("multixyz");
+    if (multixyz!=NULL && multixyz==pConv->GetOutFormat()){
+        pConv->GetOutFormat()->WriteMolecule(pmol, pConv);
+    }else{
+        for (unsigned int c = 0; c < pmol->NumConformers(); ++c) {
+          pmol->SetConformer(c);
+          if(!pConv->GetOutFormat()->WriteMolecule(pmol, pConv))
+            break;
+        }
     }
     if (pmol->NumConformers()>0) {
         pmol->SetConformer(0);

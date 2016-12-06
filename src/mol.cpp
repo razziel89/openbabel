@@ -1210,7 +1210,8 @@ namespace OpenBabel
       }
   }
 
-  OBMol &OBMol::operator=(const OBMol &source)
+  //OBMol &OBMol::operator=(const OBMol &source)
+  void OBMol::Assign(const OBMol &source, bool take)
   //atom and bond info is copied from src to dest
   //Conformers are now copied also, MM 2/7/01
   //Residue information are copied, MM 4-27-01
@@ -1220,7 +1221,7 @@ namespace OpenBabel
   //OB_TSPIN_MOL and OB_PATTERN_STRUCTURE which are copied
   {
     if (this == &source)
-      return *this;
+      return;// *this;
 
     OBMol &src = (OBMol &)source;
     vector<OBAtom*>::iterator i;
@@ -1290,15 +1291,19 @@ namespace OpenBabel
           }
       }
 
-    //Copy conformer information
+    //Copy conformer information if requested (default)
     if (src.NumConformers() > 1) {
       int k;//,l;
       vector<double*> conf;
       int currConf = -1;
       double* xyz = NULL;
       for (k=0 ; k<src.NumConformers() ; ++k) {
-        xyz = new double [3*src.NumAtoms()];
-        memcpy( xyz, src.GetConformer(k), sizeof( double )*3*src.NumAtoms() );
+        if (take){
+            xyz = src.GetConformer(k);
+        }else{
+            xyz = new double [3*src.NumAtoms()];
+            memcpy( xyz, src.GetConformer(k), sizeof( double )*3*src.NumAtoms() );
+        }
         conf.push_back(xyz);
 
         if( src.GetConformer(k) == src._c ) {
@@ -1309,6 +1314,9 @@ namespace OpenBabel
       SetConformers(conf);
       if( currConf >= 0 && _vconf.size() ) {
         _c = _vconf[currConf];
+      }
+      if (take){
+          src._vconf.clear();
       }
     }
 
@@ -1334,7 +1342,7 @@ namespace OpenBabel
     if (src.HasChiralityPerceived())
       SetChiralityPerceived();
 
-    return(*this);
+    return;
   }
 
   OBMol &OBMol::operator+=(const OBMol &source)
