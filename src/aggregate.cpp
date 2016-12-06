@@ -104,9 +104,10 @@ namespace OpenBabel
 
     for (atom = src.BeginAtom(i);atom;atom = src.NextAtom(i), ++at_count)
     {
-      a = CreateAtom();
+      a = new OBAtom();
       a->Duplicate(atom);
       AddAtom(*a,true);
+      delete a;
     }
   
     for (bond = src.BeginBond(j);bond;bond = src.NextBond(j))
@@ -163,8 +164,8 @@ namespace OpenBabel
       {
         for (second = first+1; loop && second < length; ++second)
         {
-          first_molecule  = *(_connections[first]);
-          second_molecule = *(_connections[second]);
+          first_molecule  = _connections[first];
+          second_molecule = _connections[second];
           for (i = first_molecule.begin(); loop && i != first_molecule.end();++i)
           {
             a1=*i;
@@ -190,8 +191,8 @@ namespace OpenBabel
       {
         for (second = first+1; second < length; ++second)
         {
-          first_molecule  = *(_connections[first]);
-          second_molecule = *(_connections[second]);
+          first_molecule  = _connections[first];
+          second_molecule = _connections[second];
           for (i = first_molecule.begin();i != first_molecule.end();++i)
           {
             a1=*i;
@@ -251,8 +252,8 @@ namespace OpenBabel
       {
         for (second = first+1; loop && second < length; ++second)
         {
-          first_molecule  = *(_connections[first]);
-          second_molecule = *(_connections[second]);
+          first_molecule  = _connections[first];
+          second_molecule = _connections[second];
           for (i = first_molecule.begin(); loop && i != first_molecule.end();++i)
           {
             a1=*i;
@@ -278,8 +279,8 @@ namespace OpenBabel
       {
         for (second = first+1; loop && second < length; ++second)
         {
-          first_molecule  = *(_connections[first]);
-          second_molecule = *(_connections[second]);
+          first_molecule  = _connections[first];
+          second_molecule = _connections[second];
           for (i = first_molecule.begin(); loop && i != first_molecule.end();++i)
           {
             a1=*i;
@@ -318,12 +319,12 @@ namespace OpenBabel
     bitvec.Clear();
     bitvec.Negate();
     bitvec.SetBitOff(0);
-    for (vector<vector<OBAtom*>* >::iterator it = _connections.begin(); it != _connections.end(); ++it){
-      (*it)->clear();
+    for (vector<vector<OBAtom*> >::iterator it = _connections.begin(); it != _connections.end(); ++it){
+      it->clear();
     }
     _connections.clear();
-    for (vector<vector<OBAtom*>* >::iterator it = _tags.begin(); it != _tags.end(); ++it){
-      (*it)->clear();
+    for (vector<vector<OBAtom*> >::iterator it = _tags.begin(); it != _tags.end(); ++it){
+      it->clear();
     }
     _tags.clear();
 
@@ -331,14 +332,14 @@ namespace OpenBabel
     {
       atom=GetAtom(bitvec.NextBit(-1));
       
-      vector<OBAtom*> *tempchildren = new vector<OBAtom*>();
-      tempvec = FindConnectedChildren(*tempchildren,atom);
-      tempchildren->push_back(atom);
+      vector<OBAtom*> tempchildren;
+      tempvec = FindConnectedChildren(tempchildren,atom);
+      tempchildren.push_back(atom);
       tempvec.Negate();
       bitvec&= tempvec;
-      atoms_checked +=tempchildren->size();
+      atoms_checked +=tempchildren.size();
       if (sort_it){
-        sort(tempchildren->begin(), tempchildren->end(), IdxSort);
+        sort(tempchildren.begin(), tempchildren.end(), IdxSort);
       }
       _connections.push_back(tempchildren);
 
@@ -353,10 +354,10 @@ namespace OpenBabel
       _tags.reserve(_molTags.size());
       for (outer_it = _molTags.begin(); outer_it != _molTags.end(); ++outer_it){
         if ( outer_it->size() > 0 ){
-          vector<OBAtom*> *adjustvec = new vector<OBAtom*>();
+          vector<OBAtom*> adjustvec;
           for (inner_it = outer_it->begin(); inner_it != outer_it->end(); ++inner_it){
-            adjustvec->reserve(adjustvec->size()+(_connections[*inner_it])->size());
-            adjustvec->insert(adjustvec->end(), (_connections[*inner_it])->begin(), (_connections[*inner_it])->end());
+            adjustvec.reserve(adjustvec.size()+(_connections[*inner_it]).size());
+            adjustvec.insert(adjustvec.end(), (_connections[*inner_it]).begin(), (_connections[*inner_it]).end());
           }
           _tags.push_back(adjustvec);
         }
@@ -402,116 +403,129 @@ namespace OpenBabel
     return used;
   }
 
+  OBAggregate &OBAggregate::operator=(const OBAggregate &source)
+  {
+    if (this == &source)
+      return *this;
+
+    OBAggregate &src = (OBAggregate &)source;
+    OBMol::operator=(src);
+
+    _needRefresh = src._needRefresh;
+    _nrMolecules = src._nrMolecules;
+    _useTag      = src._useTag;
+
+    typedef std::vector<int> IntVec;
+    typedef std::vector<OBAtom*> AtVec;
+    typedef std::vector<IntVec>::iterator IntIt;
+    typedef std::vector<AtVec>::iterator AtIt;
+
+    {
+        //std::vector<std::vector<int> >       _molTags
+        for (IntIt it = _molTags.begin(); it != _molTags.end(); ++it){
+            it->clear();
+        }
+        _molTags.clear();
+        _molTags.reserve(src._molTags.size());
+        // copy _molTags
+        for (IntIt src_it = src._molTags.begin(); src_it!=src._molTags.end(); ++src_it){
+            IntVec my_vec(*src_it);
+            _molTags.push_back(my_vec);
+        }
+    }
+
+    {
+        //std::vector<std::vector<OBAtom*> >  _connections
+        for (AtIt it = _connections.begin(); it != _connections.end(); ++it){
+            it->clear();
+        }
+        _connections.clear();
+        _connections.reserve(src._connections.size());
+        // copy _connections
+        for (AtIt src_it = src._connections.begin(); src_it!=src._connections.end(); ++src_it){
+
+            AtVec my_pvec;
+            my_pvec.reserve(src_it->size());
+
+            AtVec::iterator src_it_in = src_it->begin();
+            for (; src_it_in!=src_it->end(); ++src_it_in){
+
+                int idx = (*src_it_in)->GetIdx();
+                OBAtom* at = GetAtom(idx);
+                my_pvec.push_back(at);
+
+            }
+
+            _connections.push_back(my_pvec);
+            my_pvec.clear();
+
+        }
+    }
+
+    {
+        //std::vector<std::vector<OBAtom*> >  _tags
+        for (AtIt it = _tags.begin(); it != _tags.end(); ++it){
+            it->clear();
+        }
+        _tags.clear();
+        _tags.reserve(src._tags.size());
+        // copy _tags
+        for (AtIt src_it = src._tags.begin(); src_it!=src._tags.end(); ++src_it){
+
+            AtVec my_pvec;
+            my_pvec.reserve(src_it->size());
+
+            AtVec::iterator src_it_in = src_it->begin();
+            for (; src_it_in!=src_it->end(); ++src_it_in){
+
+                int idx = (*src_it_in)->GetIdx();
+                OBAtom* at = GetAtom(idx);
+                my_pvec.push_back(at);
+
+            }
+
+            _tags.push_back(my_pvec);
+
+        }
+    }
+
+
+    return(*this);
+  }
+
   OBAggregate &OBAggregate::operator=(const OBMol &source)
   {
     if (this == &source)
       return *this;
 
     OBMol &src = (OBMol &)source;
-    vector<OBAtom*>::iterator i;
-    vector<OBBond*>::iterator j;
-    OBAtom *atom;
-    OBBond *bond;
+    OBMol::operator=(src);
 
-    Clear();
-    BeginModify();
-
-    _vatom.reserve(src.NumAtoms());
-    _atomIds.reserve(src.NumAtoms());
-    _vbond.reserve(src.NumBonds());
-    _bondIds.reserve(src.NumBonds());
-
-    for (atom = src.BeginAtom(i);atom;atom = src.NextAtom(i))
-      AddAtom(*atom);
-    for (bond = src.BeginBond(j);bond;bond = src.NextBond(j))
-      AddBond(*bond);
-
-    this->_title  = src.GetTitle();
-    this->_energy = src.GetEnergy();
-    this->_dimension = src.GetDimension();
-    this->SetTotalCharge(src.GetTotalCharge()); //also sets a flag
-    this->SetTotalSpinMultiplicity(src.GetTotalSpinMultiplicity()); //also sets a flag
-
-    EndModify(); //zeros flags!
-
-    //!!!FLAGS ARE NOT COPIED OVER!!!
-
-    //Copy Residue information
-    unsigned int NumRes = src.NumResidues();
-    if (NumRes)
-      {
-        unsigned int k;
-        OBResidue *src_res=NULL;
-        OBResidue *res=NULL;
-        OBAtom *src_atom=NULL;
-        OBAtom *atom=NULL;
-        vector<OBAtom*>::iterator ii;
-        for (k=0 ; k<NumRes ; ++k)
-          {
-            res = NewResidue();
-            src_res = src.GetResidue(k);
-            res->SetName(src_res->GetName());
-            res->SetNum(src_res->GetNumString());
-            res->SetChain(src_res->GetChain());
-            res->SetChainNum(src_res->GetChainNum());
-            for (src_atom=src_res->BeginAtom(ii) ; src_atom ; src_atom=src_res->NextAtom(ii))
-              {
-                atom = GetAtom(src_atom->GetIdx());
-                res->AddAtom(atom);
-                res->SetAtomID(atom,src_res->GetAtomID(src_atom));
-                res->SetHetAtom(atom,src_res->IsHetAtom(src_atom));
-                res->SetSerialNum(atom,src_res->GetSerialNum(src_atom));
-              }
-          }
-      }
-
-    //Copy conformer information
-    if (src.NumConformers() > 1) {
-      int k;//,l;
-      vector<double*> conf;
-      int currConf = -1;
-      double* xyz = NULL;
-      for (k=0 ; k<src.NumConformers() ; ++k) {
-        xyz = new double [3*src.NumAtoms()];
-        memcpy( xyz, src.GetConformer(k), sizeof( double )*3*src.NumAtoms() );
-        conf.push_back(xyz);
-
-        if( src.GetConformer(k) == src.GetCoordinates() ) {
-          currConf = k;
-        }
-      }
-
-      SetConformers(conf);
-      if( currConf >= 0 && _vconf.size() ) {
-        _c = _vconf[currConf];
-      }
+    //std::vector<std::vector<OBAtom*> >  _connections
+    for (vector<vector<OBAtom*> >::iterator it = _connections.begin();
+            it != _connections.end(); ++it)
+    {
+        it->clear();
     }
-
-    //Copy all the OBGenericData, providing the new molecule, this,
-    //for those classes like OBRotameterList which contain Atom pointers
-    //OBGenericData classes can choose not to be cloned by returning NULL
-    vector<OBGenericData*>::iterator itr;
-    for(itr=src.BeginData();itr!=src.EndData();++itr)
-      {
-        OBGenericData* pCopiedData = (*itr)->Clone(this);
-        SetData(pCopiedData);
-      }
-
-    // copy chiral data for all atoms
-    FOR_ATOMS_OF_MOL (atom, src) {
-      if (atom->HasData(OBGenericDataType::ChiralData)) {
-        OBChiralData* cd = (OBChiralData*) atom->GetData(OBGenericDataType::ChiralData);
-        OBGenericData* pCopiedData = cd->Clone(NULL); // parent not used in OBChiralData::Clone()
-        GetAtom(atom->GetIdx())->SetData(pCopiedData);
-      }
+    _connections.clear();
+    //std::vector<std::vector<OBAtom*> >  _tags
+    for (vector<vector<OBAtom*> >::iterator it = _tags.begin();
+            it != _tags.end(); ++it)
+    {
+        it->clear();
     }
+    _tags.clear();
+    //std::vector<std::vector<int> >       _molTags
+    for (std::vector<std::vector<int> >::iterator it = _molTags.begin();
+            it != _molTags.end(); ++it)
+    {
+        it->clear();
+    }
+    _molTags.clear();
 
-    if (src.HasChiralityPerceived())
-      SetChiralityPerceived();
-
-     _needRefresh = true;
-     FindAllConnections();
-     _nrMolecules = GetNrMolecules();
+    _needRefresh = true;
+    _useTag = false;
+    FindAllConnections();
 
     return(*this);
   }
@@ -531,14 +545,14 @@ namespace OpenBabel
           FindAllConnections();
       }
       std::stringstream ss;
-      vector<vector<OBAtom*>* >::iterator outer_it;
+      vector<vector<OBAtom*> >::iterator outer_it;
       vector<OBAtom*>::iterator inner_it;
       int molcount = 0;
       for (outer_it = _connections.begin(); outer_it != _connections.end(); ++outer_it){
         ss << molcount;
         int id = -1;
         int elements = 0;
-        for (inner_it = (*outer_it)->begin(); inner_it != (*outer_it)->end(); ++inner_it){
+        for (inner_it = outer_it->begin(); inner_it != outer_it->end(); ++inner_it){
             OBAtom* atom = *inner_it;
             ss << " " << atom->GetIdx();
         }
@@ -553,14 +567,14 @@ namespace OpenBabel
       if (_needRefresh){
           FindAllConnections();
       }
-      vector<vector<OBAtom*>* >::iterator outer_it;
+      vector<vector<OBAtom*> >::iterator outer_it;
       vector<OBAtom*>::iterator inner_it;
       int molcount = 0;
       for (outer_it = _connections.begin(); outer_it != _connections.end(); ++outer_it){
         std::cout<< "MolNr. " << molcount << ": ";
         int id = -1;
         int elements = 0;
-        for (inner_it = (*outer_it)->begin(); inner_it != (*outer_it)->end(); ++inner_it){
+        for (inner_it = outer_it->begin(); inner_it != outer_it->end(); ++inner_it){
             OBAtom* atom = *inner_it;
             if ( atom->GetIdx() != id+1 ){
                 if ( id != -1 ){
@@ -596,10 +610,13 @@ namespace OpenBabel
   //! as indices for molecules in the aggregate.
   void OBAggregate::DisableTags(){
       _useTag = false;
-      for (vector<vector<OBAtom*>* >::iterator it = _tags.begin(); it != _tags.end(); ++it){
-          (*it)->clear();
+      for (vector<vector<OBAtom*> >::iterator it = _tags.begin(); it != _tags.end(); ++it){
+          it->clear();
       }
       _tags.clear();
+      for (vector<vector<int> >::iterator it = _molTags.begin(); it != _molTags.end(); ++it){
+          it->clear();
+      }
       _molTags.clear();
   }
 
@@ -764,10 +781,10 @@ namespace OpenBabel
           FindAllConnections();
       }
       if ( _useTag ){
-          Rotate(*(_tags.at(part)), matrix);
+          Rotate(_tags.at(part), matrix);
       }
       else{
-          Rotate(*(_connections.at(part)), matrix);
+          Rotate(_connections.at(part), matrix);
       }
   }
 
@@ -776,10 +793,10 @@ namespace OpenBabel
           FindAllConnections();
       }
       if ( _useTag ){
-          Rotate(*(_tags.at(part)), main_axis_nr, angle);
+          Rotate(_tags.at(part), main_axis_nr, angle);
       }
       else{
-          Rotate(*(_connections.at(part)), main_axis_nr, angle);
+          Rotate(_connections.at(part), main_axis_nr, angle);
       }
   }
 
@@ -788,10 +805,10 @@ namespace OpenBabel
           FindAllConnections();
       }
       if ( _useTag ){
-          Translate(*(_tags.at(part)), vector);
+          Translate(_tags.at(part), vector);
       }
       else{
-          Translate(*(_connections.at(part)), vector);
+          Translate(_connections.at(part), vector);
       }
   }
 
@@ -810,10 +827,10 @@ namespace OpenBabel
           FindAllConnections();
       }
       if ( _useTag ){
-          Align(*(_tags.at(part)), p, v1, v2);
+          Align(_tags.at(part), p, v1, v2);
       }
       else{
-          Align(*(_connections.at(part)), p, v1, v2);
+          Align(_connections.at(part), p, v1, v2);
       }
   }
 
@@ -826,10 +843,10 @@ namespace OpenBabel
           FindAllConnections();
       }
       if ( _useTag ){
-          Mirror(*(_tags.at(part)), normal, point, center_it);
+          Mirror(_tags.at(part), normal, point, center_it);
       }
       else{
-          Mirror(*(_connections.at(part)), normal, point, center_it);
+          Mirror(_connections.at(part), normal, point, center_it);
       }
   }
 
@@ -845,10 +862,10 @@ namespace OpenBabel
     }
     
     if ( _useTag ){
-      tempvec = *(_tags.at(part));
+      tempvec = _tags.at(part);
     }
     else{
-      tempvec = *(_connections.at(part));
+      tempvec = _connections.at(part);
     }
 
     elements = 0;
@@ -942,79 +959,50 @@ namespace OpenBabel
 
   OBAggregate::OBAggregate(const OBAggregate &agg) : OBMol(agg)
   {
-    _useTag = agg._useTag;
-    _needRefresh = true;
+    _useTag=false;
+    _nrMolecules = 0;
+    _connections.clear();
+    _needRefresh = false;
     _tags.clear();
     _molTags.clear();
-    _molTags.reserve(agg._molTags.size());
-    for (int i = 0; i<agg._molTags.size(); ++i){
-        std::vector<int> tempvec;
-        tempvec.reserve((agg._molTags[i]).size());
-        for (int j=0; j<(agg._molTags[i]).size(); ++j){
-            tempvec.push_back((agg._molTags[i])[j]);
-        }
-        _molTags.push_back(tempvec);
-    }
-    _connections.clear();
-    _natoms = _nbonds = 0;
-    _mod = 0;
-    _totalCharge = 0;
-    _dimension = 3;
-    _vatom.clear();
-    _atomIds.clear();
-    _vbond.clear();
-    _bondIds.clear();
-    _vdata.clear();
-    _title = "";
-    _c = (double*)NULL;
-    _flags = 0;
-    _vconf.clear();
-    _autoPartialCharge = true;
-    _autoFormalCharge = true;
-    _energy = 0.0;
     *this = agg;
-    FindAllConnections();
-    _nrMolecules = _connections.size();
   }
 
   OBAggregate::OBAggregate(const OBMol &mol) : OBMol(mol)
   {
     _useTag=false;
+    _nrMolecules = 0;
+    _connections.clear();
     _needRefresh = true;
     _tags.clear();
     _molTags.clear();
-    _connections.clear();
-    _natoms = _nbonds = 0;
-    _mod = 0;
-    _totalCharge = 0;
-    _dimension = 3;
-    _vatom.clear();
-    _atomIds.clear();
-    _vbond.clear();
-    _bondIds.clear();
-    _vdata.clear();
-    _title = "";
-    _c = (double*)NULL;
-    _flags = 0;
-    _vconf.clear();
-    _autoPartialCharge = true;
-    _autoFormalCharge = true;
-    _energy = 0.0;
     *this = mol;
-    FindAllConnections();
-    _nrMolecules = _connections.size();
   }
 
   //parent destructor is called automaticaly for default destructor
   OBAggregate::~OBAggregate()
   {
-      vector<vector<OBAtom*>* >::iterator it;
-      for (it = _connections.begin(); it != _connections.end(); ++it){
-          delete *it;
+      //std::vector<std::vector<OBAtom*> >  _connections
+      for (vector<vector<OBAtom*> >::iterator it = _connections.begin();
+              it != _connections.end(); ++it)
+      {
+          it->clear();
       }
-      for (it = _tags.begin(); it != _tags.end(); ++it){
-          delete *it;
+      _connections.clear();
+      //std::vector<std::vector<OBAtom*> >  _tags
+      for (vector<vector<OBAtom*> >::iterator it = _tags.begin();
+              it != _tags.end(); ++it)
+      {
+          it->clear();
       }
+      _tags.clear();
+      //std::vector<std::vector<int> >       _molTags
+      for (std::vector<std::vector<int> >::iterator it = _molTags.begin();
+              it != _molTags.end(); ++it)
+      {
+          it->clear();
+      }
+      _molTags.clear();
   }
 
 } // end namespace OpenBabel
