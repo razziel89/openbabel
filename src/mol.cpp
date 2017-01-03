@@ -1970,8 +1970,8 @@ namespace OpenBabel
     //FindChildren does not include a1 or a2 in the vector
     cleave_atoms.push_back(a2);
     if (cleave_atoms.size()+1 >= NumAtoms()){
-      std::cerr << "ERROR: the cleave-off requested would remove the entire molecule: i1: " << i1 << ", i2: " << i2 << std::endl;
-      return false;
+      std::cerr << "WARNING: the cleave-off requested will remove the entire molecule, please check result: i1: " << i1 << ", i2: " << i2 << std::endl;
+      //return false;
     }
     //Find all bonds that are to be removed.
     std::set<OBBond*> cleave_bonds;
